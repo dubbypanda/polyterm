@@ -152,4 +152,4 @@ The envelope shape is:
 }
 ```
 
-Existing command JSON payloads remain supported. New agent commands and MCP-ready tool functions should use the envelope so Hermes Agent, OpenClaw, and other tool callers can rely on one response contract.
+Existing command JSON payloads remain supported. New agent commands, FastMCP tools, and legacy JSON-lines tool functions should use the envelope so Hermes Agent, OpenClaw, and other tool callers can rely on one response contract.

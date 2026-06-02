@@ -4,7 +4,7 @@
 
 ## Overview
 
-`polyterm agent` exposes the command and schema surface that external agents use to call PolyTerm safely. The command is intentionally separate from market analysis commands so Hermes Agent, OpenClaw, Codex, and other agent runtimes can discover tools before they call them. It focuses on stable metadata, JSON Schemas, safety flags, and a lightweight MCP-ready adapter.
+`polyterm agent` exposes the command and schema surface that external agents use to call PolyTerm safely. The command is intentionally separate from market analysis commands so Hermes Agent, OpenClaw, Codex, and other agent runtimes can discover tools before they call them. It focuses on stable metadata, JSON Schemas, safety flags, a real FastMCP stdio server, and a lightweight legacy JSON-lines adapter.
 
 The command does not execute trades or hold private keys. It exposes no-custody market intelligence, wallet inspection, archive metadata, and local alert-rule workflows with explicit mutation flags.
 
@@ -17,6 +17,7 @@ polyterm agent manifest --format json
 polyterm agent schemas --format json
 polyterm agent schemas analytics.thesis --format json
 polyterm agent mcp-server
+polyterm agent jsonl-server
 polyterm agent examples
 ```
 
@@ -30,7 +31,8 @@ There is no TUI screen for agent setup. Agent workflows are intended for automat
 |------|------|---------|-------------|
 | `manifest` | command | - | Print the full tool manifest in a stable JSON envelope. |
 | `schemas` | command | - | Print all schemas or a single tool schema. |
-| `mcp-server` | command | - | Run the JSON-lines stdio adapter for MCP-ready usage. |
+| `mcp-server` | command | - | Run the real FastMCP stdio server for MCP clients. |
+| `jsonl-server` | command | - | Run the legacy JSON-lines stdio adapter for simple pipe-based integrations. |
 | `examples` | command | - | Print example JSON-lines requests. |
 | `--format` | choice | `json` | Agent output format. Currently JSON only. |
 
@@ -46,15 +48,27 @@ polyterm agent schemas --format json
 # Get one schema
 polyterm agent schemas wallet.inspect --format json
 
-# Run the MCP-ready adapter
-printf '{"tool":"market.search","args":{"query":"bitcoin","limit":3}}\n' | polyterm agent mcp-server
+# Run the real MCP stdio server
+polyterm agent mcp-server
+
+# Legacy JSON-lines request
+printf '{"tool":"market.search","args":{"query":"bitcoin","limit":3}}\n' | polyterm agent jsonl-server
 ```
 
 ## How It Works
 
-The command reads metadata from `polyterm.agent.registry`, wraps output through `polyterm.agent.contracts`, and prints responses with `utils.json_output`. The stdio adapter dispatches to small grouped tool modules under `polyterm/agent/mcp/tools`.
+The command reads metadata from `polyterm.agent.registry`, wraps output through `polyterm.agent.contracts`, and prints responses with `utils.json_output`. The FastMCP server in `polyterm.agent.mcp.fastmcp_server` dispatches to the same small grouped tool modules under `polyterm/agent/mcp/tools` as the legacy JSON-lines adapter.
 
-The adapter is MCP-ready rather than tied to a mandatory MCP package dependency. A future FastMCP wrapper can import the same tool functions without changing command behavior.
+MCP clients can configure PolyTerm as a stdio server:
+
+```yaml
+mcp_servers:
+  polyterm:
+    command: "polyterm"
+    args: ["agent", "mcp-server"]
+    timeout: 120
+    connect_timeout: 60
+```
 
 ## Data Sources
 
@@ -96,7 +110,8 @@ The same envelope is used for successful and failed responses. Failures set `suc
 ```bash
 polyterm agent manifest --format json
 polyterm agent schemas --format json
-printf '{"method":"manifest"}\n' | polyterm agent mcp-server
+polyterm agent examples
+printf '{"method":"manifest"}\n' | polyterm agent jsonl-server
 ```
 
 Run `./test_all_commands.sh` and `.venv/bin/python scripts/validate_docs.py` after changes.

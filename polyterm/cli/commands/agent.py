@@ -1,11 +1,12 @@
-"""Agent command - manifests, schemas, and MCP-ready server"""
+"""Agent command - manifests, schemas, and MCP server entrypoints"""
 
 import json
 
 import click
 
 from ...agent.contracts import envelope
-from ...agent.mcp.server import main as run_mcp_server
+from ...agent.mcp.fastmcp_server import main as run_fastmcp_server
+from ...agent.mcp.server import main as run_jsonl_server
 from ...agent.registry import get_manifest
 from ...agent.schemas import all_schemas, schema_for_tool
 from ...utils.json_output import print_json
@@ -33,18 +34,48 @@ def schemas(tool, output_format):
 
 
 @agent.command("mcp-server")
-def mcp_server():
-    """Run the MCP-ready JSON-lines stdio adapter"""
-    raise SystemExit(run_mcp_server())
+@click.option(
+    "--transport",
+    type=click.Choice(["stdio", "sse", "streamable-http"]),
+    default="stdio",
+    show_default=True,
+    help="MCP transport to serve.",
+)
+@click.option("--mount-path", default=None, help="Mount path for HTTP transports.")
+def mcp_server(transport, mount_path):
+    """Run the real FastMCP protocol server."""
+    raise SystemExit(run_fastmcp_server(transport=transport, mount_path=mount_path))
+
+
+@agent.command("jsonl-server")
+def jsonl_server():
+    """Run the legacy JSON-lines stdio adapter."""
+    raise SystemExit(run_jsonl_server())
 
 
 @agent.command()
 def examples():
-    """Print example JSON-lines requests for the MCP-ready adapter"""
-    examples_payload = [
-        {"method": "manifest"},
-        {"tool": "market.search", "args": {"query": "bitcoin", "limit": 3}},
-        {"tool": "analytics.thesis", "args": {"market": "bitcoin"}},
-        {"tool": "wallet.inspect", "args": {"address": "0x..."}},
-    ]
+    """Print example JSON-lines and MCP usage requests."""
+    examples_payload = {
+        "mcp_server": {
+            "command": "polyterm",
+            "args": ["agent", "mcp-server"],
+            "hermes_config": {
+                "mcp_servers": {
+                    "polyterm": {
+                        "command": "polyterm",
+                        "args": ["agent", "mcp-server"],
+                        "timeout": 120,
+                        "connect_timeout": 60,
+                    }
+                }
+            },
+        },
+        "legacy_jsonl": [
+            {"method": "manifest"},
+            {"tool": "market.search", "args": {"query": "bitcoin", "limit": 3}},
+            {"tool": "analytics.thesis", "args": {"market": "bitcoin"}},
+            {"tool": "wallet.inspect", "args": {"address": "0x..."}},
+        ],
+    }
     click.echo(json.dumps(examples_payload, indent=2))

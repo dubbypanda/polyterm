@@ -18,7 +18,7 @@ polyterm --help       # See all commands
 | Report | Scope | Status |
 |--------|-------|--------|
 | [June 1, 2026 Audit](AUDIT_2026-06-01.md) | Current Polymarket API standards, command health, docs validation, and live endpoint proof | Complete |
-| [Agent Mode](AGENT_MODE.md) | Hermes/OpenClaw/Codex tool manifest, schemas, safety model, and MCP-ready stdio usage | Current |
+| [Agent Mode](AGENT_MODE.md) | Hermes/OpenClaw/Codex tool manifest, schemas, safety model, FastMCP server, and legacy JSON-lines usage | Current |
 | [Execution Roadmap](EXECUTION_ROADMAP.md) | Next five implementation tracks: agent tooling, wallet intelligence, trade thesis, research archive, and alert automation | Current |
 | [TODO Backlog](TODO_BACKLOG.md) | Scoped implementation tasks linked to the current roadmap | Current |
 
@@ -30,7 +30,7 @@ Each CLI command has its own documentation page with usage, options, and example
 |---------|-------------|-----|
 | [center](cli/center.md) | Alert center management | `polyterm center` |
 | [alerts](cli/alerts.md) | Alert configuration and management | `polyterm alerts` |
-| [agent](cli/agent.md) | Agent manifests, schemas, and MCP-ready stdio adapter | `polyterm agent` |
+| [agent](cli/agent.md) | Agent manifests, schemas, FastMCP server, and legacy JSON-lines adapter | `polyterm agent` |
 | [analyze](cli/analyze.md) | Market analytics and trending | `polyterm analyze` |
 | [arbitrage](cli/arbitrage.md) | Arbitrage opportunity scanner | `polyterm arbitrage` |
 | [attribution](cli/attribution.md) | Trade attribution analysis | `polyterm attribution` |

@@ -45,7 +45,7 @@ polyterm
 PolyTerm is an analytics and intelligence layer for Polymarket — not just an API wrapper.
 
 - **20+ analytics features** no other CLI has: wallet-level whale tracking, insider detection scoring, arbitrage scanning (including cross-platform vs Kalshi), signal-based multi-factor predictions, wash trade detection, UMA dispute risk analysis, and market risk grading (A-F).
-- **Agent-ready tooling**: manifest, JSON Schemas, MCP-ready stdio adapter, `llms.txt`, and read-only market/wallet/thesis tools for Hermes Agent, OpenClaw, Codex, and other automations.
+- **Agent-ready tooling**: manifest, JSON Schemas, FastMCP stdio server, legacy JSON-lines adapter, `llms.txt`, and read-only market/wallet/thesis tools for Hermes Agent, OpenClaw, Codex, and other automations.
 - **73+ interactive TUI screens** with menu navigation, contextual help, and an onboarding tutorial. No other Polymarket terminal tool has a TUI.
 - **Terminal-native visualization**: ASCII line charts, sparklines, depth charts, and side-by-side market comparison — all without leaving the terminal.
 - **Stateful local database** (SQLite): bookmarks, price alerts, trade journal, position tracking, recently viewed markets, screener presets. Your research accumulates value over time.
@@ -129,7 +129,8 @@ For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIV
 |---------|---------|-------------|
 | Agent Manifest | `polyterm agent manifest` | Machine-readable tool registry with safety flags |
 | Agent Schemas | `polyterm agent schemas` | JSON Schemas for agent-facing tools |
-| MCP-Ready Adapter | `polyterm agent mcp-server` | JSON-lines stdio adapter for agent runtimes |
+| MCP Server | `polyterm agent mcp-server` | Real FastMCP stdio server for MCP clients |
+| JSONL Adapter | `polyterm agent jsonl-server` | Legacy JSON-lines adapter for simple pipe-based runtimes |
 | Agent Docs | `docs/AGENT_MODE.md` | Hermes/OpenClaw workflow notes and safety model |
 
 ---
@@ -482,8 +483,11 @@ polyterm agent manifest --format json
 # Print all output schemas
 polyterm agent schemas --format json
 
-# Run the MCP-ready JSON-lines adapter
-printf '{"tool":"market.search","args":{"query":"bitcoin","limit":3}}\n' | polyterm agent mcp-server
+# Run the real FastMCP stdio server for MCP clients
+polyterm agent mcp-server
+
+# Legacy JSON-lines request
+printf '{"tool":"market.search","args":{"query":"bitcoin","limit":3}}\n' | polyterm agent jsonl-server
 
 # Generate a read-only market thesis
 polyterm thesis -m bitcoin --format json
@@ -645,7 +649,8 @@ python -m twine upload dist/*
 
 ### Agent-Ready Polymarket Intelligence
 - **Agent manifest and schemas**: `polyterm agent manifest --format json` and `polyterm agent schemas --format json` expose machine-readable tool metadata, safety flags, and output contracts.
-- **MCP-ready stdio adapter**: `polyterm agent mcp-server` provides JSON-lines tool calls without requiring a mandatory MCP dependency.
+- **FastMCP stdio server**: `polyterm agent mcp-server` exposes PolyTerm as a real MCP protocol server for Hermes Agent, OpenClaw, Codex, and other MCP clients.
+- **Legacy JSON-lines adapter**: `polyterm agent jsonl-server` keeps simple pipe-based tool calls available for runtimes that do not speak MCP.
 - **Agent documentation**: `docs/AGENT_MODE.md`, `docs/tool-manifest.json`, `docs/schemas/*.schema.json`, and `llms.txt` give Hermes Agent, OpenClaw, Codex, and other agents a clear repo map.
 - **README agent caveat**: Agents are explicitly told to inspect the README, `docs/AGENT_MODE.md`, or the agent manifest before assuming they know how to use PolyTerm.
 

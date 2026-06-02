@@ -8,7 +8,8 @@ Agents can:
 
 - Discover PolyTerm tools with `polyterm agent manifest --format json`.
 - Fetch JSON Schemas with `polyterm agent schemas --format json`.
-- Use the MCP-ready JSON-lines adapter with `polyterm agent mcp-server`.
+- Use the real MCP stdio server with `polyterm agent mcp-server`.
+- Use the legacy JSON-lines adapter with `polyterm agent jsonl-server`.
 - Search and resolve markets.
 - Inspect CLOB order books and price history.
 - Generate market-level trade theses.
@@ -72,6 +73,23 @@ polyterm wallets --analyze 0xabc... --refresh --format json
 polyterm arbitrage --venues polymarket,kalshi --query bitcoin --format json
 ```
 
+Configure Hermes Agent or another MCP client with the real stdio server:
+
+```yaml
+mcp_servers:
+  polyterm:
+    command: "polyterm"
+    args: ["agent", "mcp-server"]
+    timeout: 120
+    connect_timeout: 60
+```
+
+After restarting the client, tools are exposed through MCP as `agent.manifest`, `market.search`, `market.resolve`, `analytics.arbitrage`, `analytics.thesis`, `wallet.inspect`, and `wallet.whales`.
+
+```bash
+polyterm agent mcp-server
+```
+
 Recommended sequence:
 
 1. Resolve or search for a market.
@@ -83,15 +101,15 @@ Recommended sequence:
 
 ## OpenClaw Workflow
 
-OpenClaw-style tools can use the JSON-lines adapter:
+OpenClaw-style tools that need line-delimited JSON without a full MCP client can use the legacy JSON-lines adapter:
 
 ```bash
-printf '{"method":"manifest"}\n' | polyterm agent mcp-server
-printf '{"tool":"market.search","args":{"query":"bitcoin","limit":3}}\n' | polyterm agent mcp-server
-printf '{"tool":"analytics.thesis","args":{"market":"bitcoin"}}\n' | polyterm agent mcp-server
+printf '{"method":"manifest"}\n' | polyterm agent jsonl-server
+printf '{"tool":"market.search","args":{"query":"bitcoin","limit":3}}\n' | polyterm agent jsonl-server
+printf '{"tool":"analytics.thesis","args":{"market":"bitcoin"}}\n' | polyterm agent jsonl-server
 ```
 
-This adapter does not require an MCP Python dependency. It is designed so a future FastMCP wrapper can import the same grouped tool functions.
+The legacy JSON-lines adapter does not require an MCP Python dependency. The production MCP server is implemented with FastMCP and reuses the same grouped tool functions.
 
 ## Safety Classes
 
@@ -118,7 +136,8 @@ The `market.resolve` tool and `polyterm thesis --format json` include the identi
 ```bash
 polyterm agent manifest --format json
 polyterm agent schemas --format json
-printf '{"tool":"market.search","args":{"query":"bitcoin","limit":1}}\n' | polyterm agent mcp-server
+polyterm agent mcp-server
+printf '{"tool":"market.search","args":{"query":"bitcoin","limit":1}}\n' | polyterm agent jsonl-server
 ```
 
 Run these repo gates after changing agent workflows:
