@@ -24,6 +24,7 @@ async def test_fastmcp_server_lists_agent_tools():
     assert "archive.status" in tool_names
     assert "analytics.thesis" in tool_names
     assert "wallet.inspect" in tool_names
+    assert "wallet.smart_money" in tool_names
 
 
 @pytest.mark.asyncio
@@ -109,6 +110,25 @@ async def test_fastmcp_server_calls_archive_status_handler(monkeypatch):
     assert result["success"] is True
     assert result["data"]["query"] == "bitcoin"
     assert result["meta"]["tool"] == "archive.status"
+
+
+@pytest.mark.asyncio
+async def test_fastmcp_server_calls_wallet_smart_money_handler(monkeypatch):
+    def fake_smart_money(min_win_rate=0.70, min_trades=10, limit=20):
+        return envelope(
+            {"wallet_count": 1, "wallets": [{"address": "0xsharp"}], "min_win_rate": min_win_rate},
+            meta={"tool": "wallet.smart_money"},
+        )
+
+    monkeypatch.setitem(jsonl_server.TOOL_HANDLERS, "wallet.smart_money", fake_smart_money)
+    mcp = create_server()
+    content, structured = await mcp.call_tool("wallet.smart_money", {"min_win_rate": 0.8, "min_trades": 12, "limit": 5})
+    result = structured["result"]
+
+    assert content
+    assert result["success"] is True
+    assert result["data"]["wallets"][0]["address"] == "0xsharp"
+    assert result["meta"]["tool"] == "wallet.smart_money"
 
 
 @pytest.mark.asyncio

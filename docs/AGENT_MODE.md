@@ -84,7 +84,7 @@ mcp_servers:
     connect_timeout: 60
 ```
 
-After restarting the client, tools are exposed through MCP as `agent.manifest`, `agent.schemas`, `market.search`, `market.resolve`, `market.research`, `market.explain_move`, `market.compare`, `archive.search`, `archive.status`, `analytics.arbitrage`, `analytics.thesis`, `wallet.inspect`, and `wallet.whales`.
+After restarting the client, tools are exposed through MCP as `agent.manifest`, `agent.schemas`, `market.search`, `market.resolve`, `market.research`, `market.explain_move`, `market.compare`, `archive.search`, `archive.status`, `analytics.arbitrage`, `analytics.thesis`, `wallet.inspect`, `wallet.whales`, and `wallet.smart_money`.
 
 ```bash
 polyterm agent mcp-server
@@ -95,12 +95,13 @@ Recommended sequence:
 1. Use `market.research` for a complete one-call brief.
 2. Use `market.explain_move` when the user asks why a YES price moved recently.
 3. Use `market.compare` when the user asks which of several related markets looks divergent or mispriced.
-4. Resolve or search for a market when identifiers are ambiguous.
-5. Generate a lower-level thesis when you need raw thesis internals.
-6. Inspect wallet/whale activity if the thesis depends on smart money.
-7. Check cross-venue spreads.
-8. Collect snapshots if the market needs observation over time.
-9. Create local alert rules only after policy approval.
+4. Use `wallet.smart_money` for the local high win-rate wallet leaderboard; refresh evidence first when recency matters.
+5. Resolve or search for a market when identifiers are ambiguous.
+6. Generate a lower-level thesis when you need raw thesis internals.
+7. Inspect wallet/whale activity if the thesis depends on smart money.
+8. Check cross-venue spreads.
+9. Collect snapshots if the market needs observation over time.
+10. Create local alert rules only after policy approval.
 
 ## OpenClaw Workflow
 
@@ -114,6 +115,7 @@ printf '{"tool":"market.explain_move","args":{"market":"bitcoin","hours":24}}\n'
 printf '{"tool":"market.compare","args":{"markets":["bitcoin 100k","bitcoin 90k"],"hours":24}}\n' | polyterm agent jsonl-server
 printf '{"tool":"archive.search","args":{"query":"bitcoin","limit":5}}\n' | polyterm agent jsonl-server
 printf '{"tool":"archive.status","args":{"query":"bitcoin","max_age_hours":24}}\n' | polyterm agent jsonl-server
+printf '{"tool":"wallet.smart_money","args":{"min_win_rate":0.7,"min_trades":10,"limit":20}}\n' | polyterm agent jsonl-server
 printf '{"tool":"analytics.thesis","args":{"market":"bitcoin"}}\n' | polyterm agent jsonl-server
 ```
 
@@ -123,7 +125,7 @@ The legacy JSON-lines adapter does not require an MCP Python dependency. The pro
 
 | Class | Meaning | Examples |
 |-------|---------|----------|
-| Read-only | Reads APIs or local state only | `market.research`, `market.explain_move`, `archive.search`, `archive.status`, `analytics.thesis`, `market.search`, `wallet.inspect` |
+| Read-only | Reads APIs or local state only | `market.research`, `market.explain_move`, `archive.search`, `archive.status`, `analytics.thesis`, `market.search`, `wallet.inspect`, `wallet.smart_money` |
 | Local mutation | Changes local SQLite state | `alerts.create_price_rule`, future notes/bookmark tools |
 | Long-running | Foreground process that may need cancellation | `watch.scheduled_scan`, collection workflows |
 | Prompting | Not suitable for unattended agents | Interactive table commands without JSON mode |

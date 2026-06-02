@@ -19,11 +19,13 @@ from ...utils.errors import handle_api_error
 @click.option("--limit", default=20, help="Maximum wallets to show")
 @click.option("--analyze", default=None, help="Analyze specific wallet address")
 @click.option("--refresh", is_flag=True, help="Refresh analyzed wallet from the public Data API")
+@click.option("--min-win-rate", default=0.70, type=float, help="Minimum win rate for --type smart")
+@click.option("--min-trades", default=10, type=int, help="Minimum trades for --type smart")
 @click.option("--track", default=None, help="Add wallet to tracking list")
 @click.option("--untrack", default=None, help="Remove wallet from tracking list")
 @click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table", help="Output format")
 @click.pass_context
-def wallets(ctx, wallet_type, limit, analyze, refresh, track, untrack, output_format):
+def wallets(ctx, wallet_type, limit, analyze, refresh, min_win_rate, min_trades, track, untrack, output_format):
     """Track and analyze whale and smart money wallets"""
 
     config = ctx.obj["config"]
@@ -117,8 +119,8 @@ def wallets(ctx, wallet_type, limit, analyze, refresh, track, untrack, output_fo
             wallets_list = db.get_whale_wallets()
             title = "Whale Wallets (by Volume)"
         elif wallet_type == "smart":
-            wallets_list = db.get_smart_money_wallets()
-            title = "Smart Money Wallets (>70% Win Rate)"
+            wallets_list = db.get_smart_money_wallets(min_win_rate=min_win_rate, min_trades=min_trades)
+            title = f"Smart Money Wallets (>{min_win_rate:.0%} Win Rate, {min_trades}+ Trades)"
         elif wallet_type == "suspicious":
             wallets_list = db.get_suspicious_wallets()
             title = "Suspicious Wallets (High Risk Score)"

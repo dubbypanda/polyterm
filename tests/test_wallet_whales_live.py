@@ -28,6 +28,13 @@ class FakeDatabase:
     def upsert_wallet(self, wallet):
         self.wallets.append(wallet)
 
+    def get_smart_money_wallets(self, min_win_rate=0.70, min_trades=10):
+        return [
+            wallet
+            for wallet in self.wallets
+            if wallet.win_rate >= min_win_rate and wallet.total_trades >= min_trades
+        ]
+
 
 def test_live_whales_returns_public_trades_and_wallet_rollups_by_timeframe():
     now = datetime(2026, 6, 2, 17, 0, 0, tzinfo=timezone.utc)
@@ -170,3 +177,24 @@ def test_live_whales_logs_public_trade_results_to_local_database():
     assert db.trades[0].notional == 150_000
     assert {wallet.address for wallet in db.wallets} == {"0xaaa", "0xbbb"}
     assert all("whale" in wallet.tags for wallet in db.wallets)
+
+
+def test_smart_money_returns_ranked_local_wallets_with_thresholds():
+    from polyterm.db.models import Wallet
+
+    now = datetime(2026, 6, 1)
+    db = FakeDatabase()
+    db.wallets = [
+        Wallet(address="0xsharp", first_seen=now, total_trades=20, total_volume=250_000, win_rate=0.82, avg_position_size=12_500, largest_trade=50_000, tags=["smart_money"]),
+        Wallet(address="0xsmall", first_seen=now, total_trades=9, total_volume=300_000, win_rate=0.91, avg_position_size=33_333, largest_trade=100_000, tags=["whale"]),
+        Wallet(address="0xok", first_seen=now, total_trades=15, total_volume=100_000, win_rate=0.75, avg_position_size=6_666, largest_trade=20_000, tags=[]),
+    ]
+    engine = WalletIntelligence(data_api=FakeDataAPI({}), database=db)
+
+    result = engine.smart_money(min_win_rate=0.70, min_trades=10, limit=5)
+
+    assert result["source"] == "local_db"
+    assert result["wallet_count"] == 2
+    assert [wallet["address"] for wallet in result["wallets"]] == ["0xsharp", "0xok"]
+    assert result["wallets"][0]["edge_score"] > result["wallets"][1]["edge_score"]
+    assert result["quality_flags"] == ["local_db_smart_money", "requires_recent_refresh_for_live_flow"]

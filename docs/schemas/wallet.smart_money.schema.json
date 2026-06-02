@@ -1,0 +1,40 @@
+{
+  "title": "PolyTerm wallet.smart_money response",
+  "type": "object",
+  "required": ["schema_version", "success", "data", "error", "meta"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "success": {"type": "boolean"},
+    "data": {
+      "type": "object",
+      "required": ["source", "min_win_rate", "min_trades", "wallet_count", "wallets", "quality_flags"],
+      "properties": {
+        "source": {"type": "string"},
+        "min_win_rate": {"type": "number"},
+        "min_trades": {"type": "integer"},
+        "wallet_count": {"type": "integer"},
+        "wallets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "address": {"type": "string"},
+              "total_trades": {"type": "integer"},
+              "total_volume": {"type": "number"},
+              "win_rate": {"type": "number"},
+              "avg_position_size": {"type": "number"},
+              "largest_trade": {"type": "number"},
+              "favorite_markets": {"type": "array", "items": {"type": "string"}},
+              "tags": {"type": "array", "items": {"type": "string"}},
+              "edge_score": {"type": "number"},
+              "is_smart_money": {"type": "boolean"}
+            }
+          }
+        },
+        "quality_flags": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "error": {"type": ["string", "null"]},
+    "meta": {"type": "object"}
+  }
+}

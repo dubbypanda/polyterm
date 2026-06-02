@@ -141,6 +141,36 @@ class WalletIntelligence:
             ],
         }
 
+    def smart_money(self, min_win_rate: float = 0.70, min_trades: int = 10, limit: int = 20) -> Dict[str, Any]:
+        """Return locally identified high win-rate wallets ranked for agent use."""
+        wallets = self.db.get_smart_money_wallets(min_win_rate=min_win_rate, min_trades=min_trades)
+        rows: List[Dict[str, Any]] = []
+        for wallet in wallets:
+            row = wallet.to_dict()
+            edge_score = wallet.win_rate * min(wallet.total_trades / max(min_trades, 1), 3.0)
+            row["edge_score"] = round(edge_score, 6)
+            row["is_smart_money"] = True
+            rows.append(row)
+
+        rows.sort(
+            key=lambda row: (
+                _as_float(row.get("edge_score")),
+                _as_float(row.get("total_volume")),
+                int(row.get("total_trades") or 0),
+            ),
+            reverse=True,
+        )
+        displayed = rows[:limit]
+
+        return {
+            "source": "local_db",
+            "min_win_rate": min_win_rate,
+            "min_trades": min_trades,
+            "wallet_count": len(rows),
+            "wallets": displayed,
+            "quality_flags": ["local_db_smart_money", "requires_recent_refresh_for_live_flow"],
+        }
+
     def live_whales(
         self,
         min_notional: float = 10000,

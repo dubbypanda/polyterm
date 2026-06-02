@@ -141,6 +141,13 @@ TOOLS: List[AgentTool] = [
         schema="docs/schemas/wallet.whales.schema.json",
     ),
     AgentTool(
+        name="wallet.smart_money",
+        description="Return locally identified high win-rate smart-money wallets ranked by edge score.",
+        command="polyterm wallets --type smart --format json",
+        args={"min_win_rate": "number", "min_trades": "integer", "limit": "integer"},
+        schema="docs/schemas/wallet.smart_money.schema.json",
+    ),
+    AgentTool(
         name="analytics.thesis",
         description="Generate an explainable market-level trade thesis.",
         command="polyterm thesis --market {market} --format json",

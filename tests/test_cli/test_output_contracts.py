@@ -74,6 +74,27 @@ def test_mywallet_positions_json_output_is_valid_json(tmp_path, monkeypatch):
     assert payload["positions"] == []
 
 
+@patch("polyterm.cli.commands.wallets.Database")
+def test_wallets_smart_json_accepts_agent_threshold_options(mock_db_cls, tmp_path, monkeypatch):
+    """`wallets --type smart --format json` should expose smart-money thresholds."""
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    mock_db = Mock()
+    mock_db.get_smart_money_wallets.return_value = []
+    mock_db_cls.return_value = mock_db
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["wallets", "--type", "smart", "--min-win-rate", "0.8", "--min-trades", "12", "--limit", "5", "--format", "json"],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["success"] is True
+    assert payload["type"] == "smart"
+    mock_db.get_smart_money_wallets.assert_called_once_with(min_win_rate=0.8, min_trades=12)
+
+
 @patch("polyterm.cli.commands.compare.MarketComparisonEngine")
 def test_compare_json_output_uses_stable_envelope_without_preamble(mock_engine_cls, tmp_path, monkeypatch):
     """`compare --format json` should be pure agent-envelope JSON."""

@@ -154,6 +154,13 @@ def create_server() -> Any:
     def wallet_whales(min_notional: float = 10000, hours: int = 24, limit: int = 20) -> Dict[str, Any]:
         return _call_tool("wallet.whales", min_notional=min_notional, hours=hours, limit=limit)
 
+    @mcp.tool(
+        name="wallet.smart_money",
+        description="Return locally identified high win-rate smart-money wallets ranked by edge score.",
+    )
+    def wallet_smart_money(min_win_rate: float = 0.70, min_trades: int = 10, limit: int = 20) -> Dict[str, Any]:
+        return _call_tool("wallet.smart_money", min_win_rate=min_win_rate, min_trades=min_trades, limit=limit)
+
     return mcp
 
 

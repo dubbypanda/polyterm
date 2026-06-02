@@ -25,3 +25,11 @@ def whales(min_notional: float = 10000, hours: int = 24, limit: int = 20) -> dic
         )
     finally:
         data_api.close()
+
+
+def smart_money(min_win_rate: float = 0.70, min_trades: int = 10, limit: int = 20) -> dict:
+    engine = WalletIntelligence(database=Database())
+    return envelope(
+        engine.smart_money(min_win_rate=min_win_rate, min_trades=min_trades, limit=limit),
+        meta={"tool": "wallet.smart_money"},
+    )
