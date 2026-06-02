@@ -17,14 +17,26 @@ async def test_fastmcp_server_lists_agent_tools():
 
     assert "agent.manifest" in tool_names
     assert "agent.schemas" in tool_names
+    assert "agent.doctor" in tool_names
     assert "market.search" in tool_names
     assert "market.resolve" in tool_names
+    assert "market.orderbook" in tool_names
+    assert "market.price_history" in tool_names
     assert "market.research" in tool_names
+    assert "market.explain_move" in tool_names
+    assert "market.compare" in tool_names
+    assert "scan.opportunities" in tool_names
     assert "archive.search" in tool_names
     assert "archive.status" in tool_names
+    assert "archive.manifest" in tool_names
+    assert "analytics.arbitrage" in tool_names
+    assert "analytics.risk" in tool_names
     assert "analytics.thesis" in tool_names
     assert "wallet.inspect" in tool_names
+    assert "wallet.whales" in tool_names
     assert "wallet.smart_money" in tool_names
+    assert "alerts.create_price_rule" in tool_names
+    assert "watch.scheduled_scan" in tool_names
 
 
 @pytest.mark.asyncio
@@ -129,6 +141,47 @@ async def test_fastmcp_server_calls_wallet_smart_money_handler(monkeypatch):
     assert result["success"] is True
     assert result["data"]["wallets"][0]["address"] == "0xsharp"
     assert result["meta"]["tool"] == "wallet.smart_money"
+
+
+@pytest.mark.asyncio
+async def test_fastmcp_server_calls_scan_opportunities_handler(monkeypatch):
+    def fake_scan_opportunities(query="", limit=20, min_volume=1000, min_liquidity=0, max_archive_age_hours=24):
+        return envelope(
+            {"query": query, "limit": limit, "opportunities": [{"market_id": "m1"}]},
+            meta={"tool": "scan.opportunities"},
+        )
+
+    monkeypatch.setitem(jsonl_server.TOOL_HANDLERS, "scan.opportunities", fake_scan_opportunities)
+    mcp = create_server()
+    content, structured = await mcp.call_tool(
+        "scan.opportunities",
+        {"query": "bitcoin", "limit": 3, "min_volume": 5000, "min_liquidity": 1000, "max_archive_age_hours": 12},
+    )
+    result = structured["result"]
+
+    assert content
+    assert result["success"] is True
+    assert result["data"]["opportunities"][0]["market_id"] == "m1"
+    assert result["meta"]["tool"] == "scan.opportunities"
+
+
+@pytest.mark.asyncio
+async def test_fastmcp_server_calls_agent_doctor_handler(monkeypatch):
+    def fake_doctor(skip_network=False, check_mcp=True):
+        return envelope(
+            {"summary": {"status": "ok"}, "checks": [], "hermes_config": {}, "quality_flags": ["agent_doctor"]},
+            meta={"tool": "agent.doctor"},
+        )
+
+    monkeypatch.setitem(jsonl_server.TOOL_HANDLERS, "agent.doctor", fake_doctor)
+    mcp = create_server()
+    content, structured = await mcp.call_tool("agent.doctor", {"skip_network": True})
+    result = structured["result"]
+
+    assert content
+    assert result["success"] is True
+    assert result["data"]["summary"]["status"] == "ok"
+    assert result["meta"]["tool"] == "agent.doctor"
 
 
 @pytest.mark.asyncio

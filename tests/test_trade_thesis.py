@@ -129,6 +129,45 @@ def test_trade_thesis_returns_structured_evidence_sources_for_agents():
     assert whale_source["records"][0]["tx_hash"] == "0x1"
 
 
+def test_trade_thesis_returns_confidence_inputs_and_reasoning():
+    db = FakeDatabase(
+        trades=[
+            Trade(
+                market_id="condition-1",
+                market_slug="will-bitcoin-hit-100k",
+                wallet_address="0xaaa",
+                outcome="Yes",
+                price=0.72,
+                size=200000,
+                notional=144000,
+                timestamp=datetime.now(),
+                tx_hash="0x1",
+            ),
+        ],
+        history=[
+            MarketSnapshot(market_id="condition-1", probability=0.70),
+            MarketSnapshot(market_id="condition-1", probability=0.69),
+            MarketSnapshot(market_id="condition-1", probability=0.68),
+        ],
+    )
+    engine = TradeThesisEngine(gamma_client=FakeGammaClient(), clob_client=FakeClobClient(), database=db)
+
+    result = engine.build("will-bitcoin-hit-100k")
+
+    thesis = result["thesis"]
+    inputs = thesis["confidence_inputs"]
+    assert thesis["confidence"] >= 0.7
+    assert inputs["liquidity"] == 500000.0
+    assert inputs["orderbook_available"] is True
+    assert inputs["orderbook_depth_levels"] == 2
+    assert inputs["history_data_points"] == 3
+    assert inputs["whale_trade_count"] == 1
+    assert inputs["volume_24h"] == 250000.0
+    assert "resolution_clarity_score" in inputs
+    assert any("liquidity" in item.lower() for item in thesis["confidence_reasoning"])
+    assert any("cached whale flow" in item.lower() for item in thesis["confidence_reasoning"])
+
+
 def test_trade_thesis_labels_missing_cached_whale_flow_as_gap():
     engine = TradeThesisEngine(
         gamma_client=FakeGammaClient(),

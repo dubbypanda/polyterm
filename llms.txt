@@ -5,8 +5,12 @@ PolyTerm is a no-custody Polymarket intelligence terminal for traders, researche
 ## Agent Entry Points
 
 - Human docs: `docs/AGENT_MODE.md`
+- Full LLM reference: `llms-full.txt`
+- Agent config examples: `docs/AGENT_CONFIG_EXAMPLES.md`
+- Agent cookbook: `docs/AGENT_COOKBOOK.md`
 - Tool manifest: `polyterm agent manifest --format json`
 - Schemas: `polyterm agent schemas --format json`
+- Doctor: `polyterm agent doctor --skip-network --format json`
 - MCP-ready stdio adapter: `polyterm agent mcp-server`
 - Static manifest: `docs/tool-manifest.json`
 - Static schemas: `docs/schemas/`
@@ -18,6 +22,10 @@ PolyTerm is a no-custody Polymarket intelligence terminal for traders, researche
 - `polyterm orderbook --format json`
 - `polyterm chart --format json`
 - `polyterm thesis --format json`
+- `polyterm research --format json`
+- `polyterm explain-move --format json`
+- `polyterm compare --format json`
+- `polyterm scan-opportunities --format json`
 - `polyterm wallets --analyze ADDRESS --refresh --format json`
 - `polyterm whales --wallets --format json`
 - `polyterm arbitrage --format json`

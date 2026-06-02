@@ -1,0 +1,146 @@
+# PolyTerm Full Agent Reference
+
+PolyTerm is a no-custody Polymarket intelligence toolkit for terminals and
+external agents. It exposes market discovery, CLOB data, price history,
+research briefs, archive freshness, wallet intelligence, scans, diagnostics,
+and alert-rule creation through stable JSON envelopes.
+
+PolyTerm never places trades, manages private keys, signs transactions,
+approves contracts, bridges funds, or mutates external Polymarket state.
+
+## Primary Agent Commands
+
+```bash
+polyterm agent manifest --format json
+polyterm agent schemas --format json
+polyterm agent doctor --skip-network --format json
+polyterm agent mcp-server
+polyterm agent jsonl-server
+```
+
+All agent-facing tool calls return:
+
+```json
+{
+  "schema_version": "2026-06-02",
+  "success": true,
+  "data": {},
+  "error": null,
+  "meta": {}
+}
+```
+
+## MCP Server
+
+Use the stdio server:
+
+```bash
+polyterm agent mcp-server
+```
+
+Hermes-style config:
+
+```yaml
+mcp_servers:
+  polyterm:
+    command: "polyterm"
+    args: ["agent", "mcp-server"]
+    timeout: 120
+    connect_timeout: 60
+```
+
+## Tool Surface
+
+- `agent.schemas`: return rich input/output schemas and safety metadata.
+- `agent.doctor`: diagnose schemas, manifest sync, MCP boot, APIs, archive health, and Hermes config.
+- `market.search`: search active markets by query.
+- `market.resolve`: resolve a slug, URL, Gamma ID, condition ID, or token ID.
+- `market.orderbook`: return CLOB order book and spread analysis for a token ID.
+- `market.price_history`: return CLOB-backed price history for a market.
+- `market.research`: build a one-call research brief with thesis, evidence, risks, gaps, next actions, optional whale prefetch, and archive persistence.
+- `market.explain_move`: explain recent YES price movement using history, order book context, and quality flags.
+- `market.compare`: compare markets side by side with probability gaps, moves, liquidity, and evidence quality.
+- `scan.opportunities`: scan markets for fresh moves, stale archive coverage, and research-worthy opportunities.
+- `analytics.arbitrage`: scan Polymarket and optional venues for spreads.
+- `analytics.risk`: assess market risk factors with a scored explanation.
+- `analytics.thesis`: generate an explainable market-level thesis.
+- `archive.search`: search locally archived research briefs.
+- `archive.status`: report local archive coverage and freshness.
+- `archive.manifest`: list local archive datasets and quality flags.
+- `wallet.inspect`: inspect a wallet using public Data API and local evidence.
+- `wallet.whales`: return wallet-level whale activity from public Data API trade history.
+- `wallet.smart_money`: return locally identified high win-rate wallets ranked by edge score.
+- `alerts.create_price_rule`: create a local price alert rule.
+- `watch.scheduled_scan`: run bounded scheduled scan workflows.
+
+## Recommended Workflows
+
+Research a market:
+
+```bash
+polyterm research --market "bitcoin" --persist --format json
+```
+
+Explain a recent move:
+
+```bash
+polyterm explain-move --market "bitcoin" --hours 24 --format json
+```
+
+Compare related markets:
+
+```bash
+polyterm compare -m "bitcoin 100k" -m "bitcoin 90k" --format json
+```
+
+Find research candidates:
+
+```bash
+polyterm scan-opportunities --query crypto --limit 10 --format json
+```
+
+Inspect whale flow:
+
+```bash
+polyterm whales --wallets --min-amount 100000 --hours 72 --format json
+```
+
+Check archive freshness:
+
+```bash
+polyterm archive status --query bitcoin --max-age-hours 24 --format json
+```
+
+Run diagnostics:
+
+```bash
+polyterm agent doctor --skip-network --format json
+```
+
+## Identifier Rules
+
+Gamma IDs and slugs are for discovery and metadata. CLOB condition IDs identify
+markets. CLOB token IDs identify YES/NO order books. Data API wallet calls use
+wallet or proxy wallet addresses.
+
+Use `market.resolve` when the user gives an ambiguous identifier.
+
+## Safety Rules
+
+Treat `alerts.create_price_rule` as a local-state mutation. It writes a local
+SQLite alert rule but does not touch Polymarket.
+
+Treat `watch.scheduled_scan` as potentially long-running. Use bounded runs or
+an external timeout.
+
+Treat all market, wallet, and archive data as public, incomplete, and possibly
+stale. Prefer cited `evidence_sources`, `quality_flags`, and
+`recommended_actions` over prose-only conclusions.
+
+## Documentation
+
+- Agent mode: `docs/AGENT_MODE.md`
+- Agent config examples: `docs/AGENT_CONFIG_EXAMPLES.md`
+- Agent cookbook: `docs/AGENT_COOKBOOK.md`
+- Static manifest: `docs/tool-manifest.json`
+- Static schemas: `docs/schemas/`

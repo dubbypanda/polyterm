@@ -65,6 +65,13 @@ def create_server() -> Any:
         except KeyError as exc:
             return error_envelope(str(exc), meta={"tool": "agent.schemas"})
 
+    @mcp.tool(
+        name="agent.doctor",
+        description="Diagnose PolyTerm agent installation, schemas, manifests, MCP boot, APIs, and archive health.",
+    )
+    def agent_doctor(skip_network: bool = True) -> Dict[str, Any]:
+        return _call_tool("agent.doctor", skip_network=skip_network, check_mcp=False)
+
     @mcp.tool(name="market.search", description="Search active Polymarket markets by query.")
     def market_search(query: str, limit: int = 10) -> Dict[str, Any]:
         return _call_tool("market.search", query=query, limit=limit)
@@ -98,6 +105,14 @@ def create_server() -> Any:
             persist=persist,
         )
 
+    @mcp.tool(name="market.orderbook", description="Return order book and spread analysis for a CLOB token ID.")
+    def market_orderbook(token_id: str, depth: int = 20) -> Dict[str, Any]:
+        return _call_tool("market.orderbook", token_id=token_id, depth=depth)
+
+    @mcp.tool(name="market.price_history", description="Return CLOB-backed price history for a market.")
+    def market_price_history(market: str, hours: int = 24) -> Dict[str, Any]:
+        return _call_tool("market.price_history", market=market, hours=hours)
+
     @mcp.tool(
         name="market.explain_move",
         description="Explain a recent YES price move with CLOB price history, order book context, and quality flags.",
@@ -113,11 +128,38 @@ def create_server() -> Any:
         return _call_tool("market.compare", markets=markets, hours=hours)
 
     @mcp.tool(
+        name="scan.opportunities",
+        description="Scan active markets for unusual moves, stale archive coverage, and research-worthy opportunities.",
+    )
+    def scan_opportunities(
+        query: str = "",
+        limit: int = 20,
+        min_volume: float = 1000,
+        min_liquidity: float = 0,
+        max_archive_age_hours: int = 24,
+    ) -> Dict[str, Any]:
+        return _call_tool(
+            "scan.opportunities",
+            query=query,
+            limit=limit,
+            min_volume=min_volume,
+            min_liquidity=min_liquidity,
+            max_archive_age_hours=max_archive_age_hours,
+        )
+
+    @mcp.tool(
         name="analytics.arbitrage",
         description="Scan Polymarket and optional venues for arbitrage opportunities.",
     )
     def analytics_arbitrage(min_spread: float = 0.025, venues: str = "polymarket") -> Dict[str, Any]:
         return _call_tool("analytics.arbitrage", min_spread=min_spread, venues=venues)
+
+    @mcp.tool(
+        name="analytics.risk",
+        description="Assess market risk factors and return a scored explanation.",
+    )
+    def analytics_risk(market: str) -> Dict[str, Any]:
+        return _call_tool("analytics.risk", market=market)
 
     @mcp.tool(
         name="analytics.thesis",
@@ -141,6 +183,13 @@ def create_server() -> Any:
         return _call_tool("archive.status", query=query, market_id=market_id, max_age_hours=max_age_hours)
 
     @mcp.tool(
+        name="archive.manifest",
+        description="List local research archive datasets and quality flags.",
+    )
+    def archive_manifest(dataset: str = "latest") -> Dict[str, Any]:
+        return _call_tool("archive.manifest", dataset=dataset)
+
+    @mcp.tool(
         name="wallet.inspect",
         description="Inspect a wallet using public Data API and local PolyTerm evidence.",
     )
@@ -160,6 +209,22 @@ def create_server() -> Any:
     )
     def wallet_smart_money(min_win_rate: float = 0.70, min_trades: int = 10, limit: int = 20) -> Dict[str, Any]:
         return _call_tool("wallet.smart_money", min_win_rate=min_win_rate, min_trades=min_trades, limit=limit)
+
+    @mcp.tool(
+        name="alerts.create_price_rule",
+        description="Create a local price alert rule.",
+    )
+    def alerts_create_price_rule(market: str, above: float = 0, below: float = 0) -> Dict[str, Any]:
+        above_value = above if above else None
+        below_value = below if below else None
+        return _call_tool("alerts.create_price_rule", market=market, above=above_value, below=below_value)
+
+    @mcp.tool(
+        name="watch.scheduled_scan",
+        description="Run a bounded scheduled scan workflow.",
+    )
+    def watch_scheduled_scan(market: str = "", schedule: str = "", runs: int = 1) -> Dict[str, Any]:
+        return _call_tool("watch.scheduled_scan", market=market, schedule=schedule, runs=runs)
 
     return mcp
 

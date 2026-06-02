@@ -36,7 +36,7 @@ result = monitor.scan("bitcoin", venues=["polymarket", "kalshi"])
 
 The monitor fetches Polymarket markets through Gamma and external markets through a venue adapter. It normalizes each market into `VenueMarket`, compares titles with a simple token-overlap score, and reports spreads when the match confidence and price gap pass thresholds.
 
-Each opportunity includes fee-adjusted spread, match confidence, and quality flags so traders and agents can avoid overtrusting loose text matches.
+Each opportunity includes fee-adjusted spread, match confidence, spread confidence, execution caveats, resolution caveats, and quality flags so traders and agents can avoid overtrusting loose text matches.
 
 ## Data Sources
 
@@ -50,8 +50,12 @@ Cross-venue output can include:
 - `manual_review_match`
 - `stale_external_data`
 - `fee_estimate_only`
+- `venue_mismatch`
+- `resolution_mismatch_possible`
+- `fees_may_consume_spread`
+- `no_trade_execution`
 
-Agents should treat low-confidence matches as research leads, not executable instructions.
+Agents should treat low-confidence matches as research leads, not executable instructions. `execution_caveats` explains fee, slippage, fill, venue, custody, and stale-data limits. `resolution_caveats` calls out cases where titles match loosely but resolution criteria may not be equivalent.
 
 ## Identifier Requirements
 

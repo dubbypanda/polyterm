@@ -43,6 +43,13 @@ TOOLS: List[AgentTool] = [
         schema="docs/schemas/agent.schemas.schema.json",
     ),
     AgentTool(
+        name="agent.doctor",
+        description="Diagnose PolyTerm agent installation, schemas, manifests, MCP boot, APIs, and archive health.",
+        command="polyterm agent doctor --format json",
+        args={"skip_network": "boolean"},
+        schema="docs/schemas/agent.doctor.schema.json",
+    ),
+    AgentTool(
         name="market.search",
         description="Search active Polymarket markets by query.",
         command="polyterm search {query} --format json",
@@ -97,6 +104,19 @@ TOOLS: List[AgentTool] = [
         command="polyterm compare --markets <market> --markets <market> --format json",
         args={"markets": "array", "hours": "integer"},
         schema="docs/schemas/market.compare.schema.json",
+    ),
+    AgentTool(
+        name="scan.opportunities",
+        description="Scan active markets for unusual moves, stale archive coverage, and research-worthy opportunities.",
+        command="polyterm scan-opportunities --query <query> --format json",
+        args={
+            "query": "string",
+            "limit": "integer",
+            "min_volume": "number",
+            "min_liquidity": "number",
+            "max_archive_age_hours": "integer",
+        },
+        schema="docs/schemas/scan.opportunities.schema.json",
     ),
     AgentTool(
         name="analytics.arbitrage",

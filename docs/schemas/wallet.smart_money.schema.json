@@ -27,6 +27,13 @@
               "favorite_markets": {"type": "array", "items": {"type": "string"}},
               "tags": {"type": "array", "items": {"type": "string"}},
               "edge_score": {"type": "number"},
+              "smart_money_score": {"type": "number"},
+              "wallet_role": {"type": "string"},
+              "is_whale": {"type": "boolean"},
+              "is_noisy": {"type": "boolean"},
+              "noisy_reasons": {"type": "array", "items": {"type": "string"}},
+              "ranking_inputs": {"type": "object"},
+              "explanation": {"type": "string"},
               "is_smart_money": {"type": "boolean"}
             }
           }

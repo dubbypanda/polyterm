@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PolyTerm agent.doctor response",
+  "description": "Stable envelope for PolyTerm agent installation diagnostics.",
+  "type": "object",
+  "required": ["schema_version", "success", "data", "error", "meta"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "success": {"type": "boolean"},
+    "error": {"type": ["string", "null"]},
+    "meta": {"type": "object"},
+    "data": {
+      "type": "object",
+      "required": ["summary", "checks", "hermes_config", "quality_flags"],
+      "properties": {
+        "summary": {
+          "type": "object",
+          "properties": {
+            "status": {"type": "string"},
+            "ok": {"type": "integer"},
+            "warn": {"type": "integer"},
+            "error": {"type": "integer"},
+            "skipped": {"type": "integer"}
+          }
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "status", "message", "details"],
+            "properties": {
+              "name": {"type": "string"},
+              "status": {"type": "string"},
+              "message": {"type": "string"},
+              "details": {"type": "object"}
+            }
+          }
+        },
+        "hermes_config": {"type": "object"},
+        "quality_flags": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

@@ -84,4 +84,6 @@ Agents can call `wallet.smart_money` through MCP or the JSON-lines adapter to in
 printf '{"tool":"wallet.smart_money","args":{"min_win_rate":0.7,"min_trades":10,"limit":20}}\n' | polyterm agent jsonl-server
 ```
 
-The tool returns the stable PolyTerm envelope. `data.wallets` are ranked by `edge_score`, a deterministic blend of win rate and trade-count depth. Quality flags include `local_db_smart_money` and `requires_recent_refresh_for_live_flow`; refresh wallet evidence with `wallet.whales` or `polyterm wallets --analyze <address> --refresh` when recency matters.
+The tool returns the stable PolyTerm envelope. `data.wallets` preserve the older `edge_score` field and also include `smart_money_score`, `wallet_role`, `is_whale`, `is_noisy`, `noisy_reasons`, `ranking_inputs`, and an `explanation`. Ranking inputs include hit rate, trade count, total volume, largest trade, recency, market focus, wallet risk score, and explicit `realized_pnl_available=false` when local realized PnL is not available.
+
+Quality flags include `local_db_smart_money` and `requires_recent_refresh_for_live_flow`; refresh wallet evidence with `wallet.whales` or `polyterm wallets --analyze <address> --refresh` when recency matters.

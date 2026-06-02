@@ -16,6 +16,7 @@ The command does not execute trades or hold private keys. It exposes no-custody 
 polyterm agent manifest --format json
 polyterm agent schemas --format json
 polyterm agent schemas analytics.thesis --format json
+polyterm agent doctor --format json
 polyterm agent mcp-server
 polyterm agent jsonl-server
 polyterm agent examples
@@ -31,9 +32,11 @@ There is no TUI screen for agent setup. Agent workflows are intended for automat
 |------|------|---------|-------------|
 | `manifest` | command | - | Print the full tool manifest in a stable JSON envelope. |
 | `schemas` | command | - | Print all schemas or a single tool schema. |
+| `doctor` | command | - | Diagnose schema files, manifest sync, MCP boot, API connectivity, SQLite archive health, and Hermes config. |
 | `mcp-server` | command | - | Run the real FastMCP stdio server for MCP clients. |
 | `jsonl-server` | command | - | Run the legacy JSON-lines stdio adapter for simple pipe-based integrations. |
 | `examples` | command | - | Print example JSON-lines requests. |
+| `--skip-network` | flag | `false` | Skip Data API and CLOB connectivity checks in doctor mode. |
 | `--format` | choice | `json` | Agent output format. Currently JSON only. |
 
 ## Examples
@@ -47,6 +50,9 @@ polyterm agent schemas --format json
 
 # Get one schema
 polyterm agent schemas wallet.inspect --format json
+
+# Diagnose the local agent/MCP installation
+polyterm agent doctor --skip-network --format json
 
 # Run the real MCP stdio server
 polyterm agent mcp-server
@@ -135,11 +141,25 @@ Agent command outputs use:
 
 The same envelope is used for successful and failed responses. Failures set `success` to `false` and put the error text in `error`.
 
+## Doctor Checks
+
+`polyterm agent doctor` runs bounded diagnostics that are safe for automation.
+It checks that registry schema files exist and parse, the runtime registry is
+in sync with `docs/tool-manifest.json`, the local SQLite archive is readable,
+the FastMCP server can be constructed, and the Hermes config snippet is
+available in the output. Unless `--skip-network` is used, it also probes the
+Polymarket Data API and CLOB sampling markets endpoint.
+
+The command returns a summary status of `ok`, `warn`, or `error`. Network
+connectivity failures are warnings because an offline environment can still
+have a valid local installation.
+
 ## Verification
 
 ```bash
 polyterm agent manifest --format json
 polyterm agent schemas --format json
+polyterm agent doctor --skip-network --format json
 polyterm agent examples
 printf '{"method":"manifest"}\n' | polyterm agent jsonl-server
 ```

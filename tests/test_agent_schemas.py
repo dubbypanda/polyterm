@@ -50,6 +50,7 @@ def test_all_schemas_returns_rich_schema_for_every_registered_tool():
     schemas = all_schemas()
 
     assert "agent.schemas" in schemas
+    assert "agent.doctor" in schemas
     assert "market.explain_move" in schemas
     assert "market.compare" in schemas
     assert "market.research" in schemas
@@ -64,6 +65,7 @@ def test_all_schemas_returns_rich_schema_for_every_registered_tool():
     assert schemas["market.compare"]["input_schema"]["properties"]["markets"] == {"type": "array", "items": {"type": "string"}}
     assert schemas["market.compare"]["output_schema"]["properties"]["data"]["properties"]["pairwise"]["type"] == "array"
     assert schemas["wallet.smart_money"]["input_schema"]["properties"]["min_win_rate"] == {"type": "number"}
+    assert schemas["agent.doctor"]["input_schema"]["properties"]["skip_network"] == {"type": "boolean"}
     assert "safety" in schemas["alerts.create_price_rule"]
     assert schemas["alerts.create_price_rule"]["safety"]["mutates_local_state"] is True
 

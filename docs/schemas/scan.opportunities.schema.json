@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PolyTerm scan.opportunities response",
+  "description": "Stable envelope for agent-native market opportunity and anomaly scanning.",
+  "type": "object",
+  "required": ["schema_version", "success", "data", "error", "meta"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "success": {"type": "boolean"},
+    "error": {"type": ["string", "null"]},
+    "meta": {"type": "object"},
+    "data": {
+      "type": "object",
+      "required": ["query", "limit", "scanned_count", "opportunity_count", "opportunities", "recommended_actions", "quality_flags", "generated_at"],
+      "properties": {
+        "query": {"type": "string"},
+        "limit": {"type": "integer"},
+        "min_volume": {"type": "number"},
+        "min_liquidity": {"type": "number"},
+        "max_archive_age_hours": {"type": "integer"},
+        "scanned_count": {"type": "integer"},
+        "opportunity_count": {"type": "integer"},
+        "stale_archive_count": {"type": "integer"},
+        "opportunities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "market_id": {"type": "string"},
+              "slug": {"type": "string"},
+              "title": {"type": "string"},
+              "probability": {"type": "number"},
+              "previous_probability": {"type": "number"},
+              "change_24h": {"type": "number"},
+              "volume_24h": {"type": "number"},
+              "liquidity": {"type": "number"},
+              "score": {"type": "number"},
+              "signals": {"type": "array", "items": {"type": "string"}},
+              "archive_status": {"type": "string"},
+              "archive_quality_flags": {"type": "array", "items": {"type": "string"}},
+              "recommended_actions": {"type": "array", "items": {"type": "string"}},
+              "evidence_sources": {"type": "array", "items": {"type": "object"}},
+              "quality_flags": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        },
+        "recommended_actions": {"type": "array", "items": {"type": "string"}},
+        "quality_flags": {"type": "array", "items": {"type": "string"}},
+        "errors": {"type": "array", "items": {"type": "string"}},
+        "generated_at": {"type": "string"}
+      }
+    }
+  }
+}

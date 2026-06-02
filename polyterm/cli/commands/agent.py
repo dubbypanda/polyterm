@@ -3,8 +3,11 @@
 import json
 
 import click
+from rich.console import Console
+from rich.table import Table
 
 from ...agent.contracts import envelope
+from ...agent.doctor import AgentDoctor
 from ...agent.mcp.fastmcp_server import main as run_fastmcp_server
 from ...agent.mcp.server import main as run_jsonl_server
 from ...agent.registry import get_manifest
@@ -31,6 +34,27 @@ def schemas(tool, output_format):
     """Print JSON Schemas for one tool or every tool"""
     payload = schema_for_tool(tool) if tool else all_schemas()
     print_json(envelope(payload, meta={"tool": "agent.schemas"}))
+
+
+@agent.command()
+@click.option("--skip-network", is_flag=True, help="Skip live Data API and CLOB connectivity checks.")
+@click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table")
+def doctor(skip_network, output_format):
+    """Diagnose PolyTerm agent and MCP installation health."""
+    result = AgentDoctor().run(skip_network=skip_network, check_mcp=True)
+    if output_format == "json":
+        print_json(envelope(result, meta={"tool": "agent.doctor"}))
+        return
+
+    console = Console()
+    table = Table(title="PolyTerm Agent Doctor")
+    table.add_column("Check")
+    table.add_column("Status", justify="center")
+    table.add_column("Message")
+    for check in result["checks"]:
+        table.add_row(check["name"], check["status"].upper(), check["message"])
+    console.print(table)
+    console.print(f"[dim]Summary: {result['summary']['status']}[/dim]")
 
 
 @agent.command("mcp-server")

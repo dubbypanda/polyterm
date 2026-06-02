@@ -197,4 +197,10 @@ def test_smart_money_returns_ranked_local_wallets_with_thresholds():
     assert result["wallet_count"] == 2
     assert [wallet["address"] for wallet in result["wallets"]] == ["0xsharp", "0xok"]
     assert result["wallets"][0]["edge_score"] > result["wallets"][1]["edge_score"]
+    assert result["wallets"][0]["smart_money_score"] > result["wallets"][1]["smart_money_score"]
+    assert result["wallets"][0]["ranking_inputs"]["hit_rate"] == 0.82
+    assert result["wallets"][0]["ranking_inputs"]["realized_pnl_available"] is False
+    assert result["wallets"][0]["is_whale"] is True
+    assert result["wallets"][0]["wallet_role"] == "smart_money_whale"
+    assert result["wallets"][0]["explanation"]
     assert result["quality_flags"] == ["local_db_smart_money", "requires_recent_refresh_for_live_flow"]

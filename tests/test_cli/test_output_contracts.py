@@ -113,3 +113,46 @@ def test_compare_json_output_uses_stable_envelope_without_preamble(mock_engine_c
     assert payload["data"] == {"query": ["a", "b"], "count": 2, "pairwise": []}
     assert payload["meta"]["tool"] == "market.compare"
     mock_engine.compare.assert_called_once_with(["a", "b"], hours=24)
+
+
+@patch("polyterm.cli.commands.scan_opportunities.MarketOpportunityScanner")
+def test_scan_opportunities_json_output_uses_stable_envelope(mock_scanner_cls, tmp_path, monkeypatch):
+    """`scan-opportunities --format json` should be pure agent-envelope JSON."""
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    mock_scanner = Mock()
+    mock_scanner.scan.return_value = {"query": "bitcoin", "opportunities": [{"market_id": "m1"}]}
+    mock_scanner_cls.return_value = mock_scanner
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "scan-opportunities",
+            "--query",
+            "bitcoin",
+            "--limit",
+            "3",
+            "--min-volume",
+            "5000",
+            "--min-liquidity",
+            "1000",
+            "--max-archive-age-hours",
+            "12",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["schema_version"] == "2026-06-02"
+    assert payload["success"] is True
+    assert payload["data"] == {"query": "bitcoin", "opportunities": [{"market_id": "m1"}]}
+    assert payload["meta"]["tool"] == "scan.opportunities"
+    mock_scanner.scan.assert_called_once_with(
+        query="bitcoin",
+        limit=3,
+        min_volume=5000.0,
+        min_liquidity=1000.0,
+        max_archive_age_hours=12,
+    )

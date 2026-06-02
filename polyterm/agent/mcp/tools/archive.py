@@ -16,3 +16,8 @@ def status(query: str = "", market_id: str = "", max_age_hours: int = 24) -> dic
         collector.status(query=query, market_id=market_id, max_age_hours=max_age_hours),
         meta={"tool": "archive.status"},
     )
+
+
+def manifest(dataset: str = "latest") -> dict:
+    collector = ArchiveCollector(database=Database())
+    return envelope(collector.dataset_manifest(dataset=dataset), meta={"tool": "archive.manifest"})

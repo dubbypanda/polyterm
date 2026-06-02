@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import Mock, MagicMock
-from polyterm.core.scanner import MarketScanner, MarketSnapshot
+from polyterm.core.scanner import MarketOpportunityScanner, MarketScanner, MarketSnapshot
 
 
 class TestMarketSnapshot:
@@ -197,3 +197,73 @@ class TestMarketScanner:
         # Should only include recent snapshots
         assert len(history) == 5
 
+
+class TestMarketOpportunityScanner:
+    """Test agent-native one-shot opportunity scans."""
+
+    def test_scan_scores_markets_and_archive_freshness(self):
+        gamma = Mock()
+        gamma.search_markets.return_value = [
+            {
+                "id": "m1",
+                "slug": "bitcoin-up",
+                "question": "Will Bitcoin go up?",
+                "outcomePrices": "[0.62, 0.38]",
+                "previousYesPrice": "0.50",
+                "volume24hr": "25000",
+                "liquidity": "9000",
+                "active": True,
+                "closed": False,
+            },
+            {
+                "id": "m2",
+                "slug": "quiet-market",
+                "question": "Quiet market?",
+                "outcomePrices": "[0.51, 0.49]",
+                "previousYesPrice": "0.50",
+                "volume24hr": "250",
+                "liquidity": "100",
+                "active": True,
+                "closed": False,
+            },
+        ]
+
+        def archive_status(query="", market_id="", max_age_hours=24):
+            if market_id == "m1":
+                return {
+                    "freshness": {"research_briefs": {"status": "stale"}},
+                    "recommended_actions": ["Refresh research"],
+                    "quality_flags": ["stale_research_briefs"],
+                }
+            return {
+                "freshness": {"research_briefs": {"status": "fresh"}},
+                "recommended_actions": [],
+                "quality_flags": ["archive_status"],
+            }
+
+        scanner = MarketOpportunityScanner(gamma_client=gamma, archive_status_provider=archive_status)
+
+        result = scanner.scan(query="bitcoin", limit=5, min_volume=1000, min_liquidity=500)
+
+        assert result["query"] == "bitcoin"
+        assert result["scanned_count"] == 2
+        assert result["opportunity_count"] == 1
+        assert result["stale_archive_count"] == 1
+        item = result["opportunities"][0]
+        assert item["market_id"] == "m1"
+        assert item["change_24h"] == 24.0
+        assert "fresh_move" in item["signals"]
+        assert "liquid_enough" in item["signals"]
+        assert "archive_refresh_needed" in item["signals"]
+        assert "Run market.research with persist=true for bitcoin-up." in item["recommended_actions"]
+
+    def test_scan_reports_live_data_errors(self):
+        gamma = Mock()
+        gamma.search_markets.side_effect = RuntimeError("boom")
+        scanner = MarketOpportunityScanner(gamma_client=gamma)
+
+        result = scanner.scan(query="bitcoin")
+
+        assert result["opportunity_count"] == 0
+        assert "live_market_scan_unavailable" in result["quality_flags"]
+        assert result["errors"] == ["boom"]

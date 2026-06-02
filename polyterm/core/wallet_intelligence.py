@@ -25,6 +25,85 @@ def _position_value(position: Dict[str, Any]) -> float:
     )
 
 
+def _smart_money_profile(wallet: Wallet, min_trades: int) -> Dict[str, Any]:
+    """Return agent-readable smart-money ranking details for one wallet."""
+    now = datetime.now()
+    updated_at = wallet.updated_at
+    recency_days = max((now - updated_at).days, 0) if updated_at else None
+    is_whale = wallet.total_volume >= 100000 or wallet.largest_trade >= 50000
+    market_focus = list(wallet.favorite_markets or [])[:5]
+    noisy_reasons: List[str] = []
+
+    if wallet.total_trades < max(min_trades * 2, min_trades + 5):
+        noisy_reasons.append("limited_trade_sample")
+    if wallet.risk_score >= 70:
+        noisy_reasons.append("high_wallet_risk_score")
+    if wallet.win_rate >= 0.95 and wallet.total_trades < 25:
+        noisy_reasons.append("very_high_hit_rate_small_sample")
+
+    hit_rate_component = wallet.win_rate * 40
+    trade_depth_component = min(wallet.total_trades / max(min_trades, 1), 3.0) / 3.0 * 20
+    volume_component = min(wallet.total_volume / 250000, 1.0) * 15
+    recency_component = _recency_component(recency_days)
+    focus_component = min(len(market_focus), 5) / 5 * 5
+    risk_penalty = min(max(wallet.risk_score, 0), 100) / 100 * 15
+    smart_money_score = max(
+        hit_rate_component
+        + trade_depth_component
+        + volume_component
+        + recency_component
+        + focus_component
+        - risk_penalty,
+        0,
+    )
+
+    return {
+        "smart_money_score": round(smart_money_score, 6),
+        "wallet_role": "smart_money_whale" if is_whale else "smart_money",
+        "is_whale": is_whale,
+        "is_noisy": bool(noisy_reasons),
+        "noisy_reasons": noisy_reasons,
+        "ranking_inputs": {
+            "hit_rate": wallet.win_rate,
+            "trade_count": wallet.total_trades,
+            "total_volume": wallet.total_volume,
+            "largest_trade": wallet.largest_trade,
+            "recency_days": recency_days,
+            "market_focus": market_focus,
+            "risk_score": wallet.risk_score,
+            "realized_pnl": None,
+            "realized_pnl_available": False,
+        },
+        "explanation": _smart_money_explanation(wallet, is_whale, noisy_reasons),
+    }
+
+
+def _recency_component(recency_days: Optional[int]) -> float:
+    if recency_days is None:
+        return 0.0
+    if recency_days <= 7:
+        return 10.0
+    if recency_days <= 30:
+        return 6.0
+    if recency_days <= 90:
+        return 3.0
+    return 0.0
+
+
+def _smart_money_explanation(wallet: Wallet, is_whale: bool, noisy_reasons: List[str]) -> str:
+    parts = [
+        f"Win rate {wallet.win_rate:.0%} over {wallet.total_trades} trade(s)",
+        f"volume ${wallet.total_volume:,.0f}",
+    ]
+    if is_whale:
+        parts.append("also qualifies as whale-sized flow")
+    if wallet.favorite_markets:
+        parts.append(f"focus markets: {', '.join(wallet.favorite_markets[:3])}")
+    if noisy_reasons:
+        parts.append(f"caveats: {', '.join(noisy_reasons)}")
+    return "; ".join(parts) + "."
+
+
 class WalletIntelligence:
     """Analyze public and locally observed wallet behavior."""
 
@@ -149,11 +228,13 @@ class WalletIntelligence:
             row = wallet.to_dict()
             edge_score = wallet.win_rate * min(wallet.total_trades / max(min_trades, 1), 3.0)
             row["edge_score"] = round(edge_score, 6)
+            row.update(_smart_money_profile(wallet, min_trades=min_trades))
             row["is_smart_money"] = True
             rows.append(row)
 
         rows.sort(
             key=lambda row: (
+                _as_float(row.get("smart_money_score")),
                 _as_float(row.get("edge_score")),
                 _as_float(row.get("total_volume")),
                 int(row.get("total_trades") or 0),

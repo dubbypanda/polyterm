@@ -11,22 +11,30 @@ from typing import Callable, Dict
 
 from ..contracts import envelope, error_envelope
 from ..registry import get_manifest
-from .tools import analytics, archive, market, wallet
+from .tools import alerts, analytics, archive, market, meta, scan, wallet, watch
 
 
 TOOL_HANDLERS: Dict[str, Callable[..., dict]] = {
     "market.search": market.search,
+    "agent.doctor": meta.doctor,
     "market.resolve": market.resolve,
+    "market.orderbook": market.orderbook,
+    "market.price_history": market.price_history,
     "market.research": market.research,
     "market.explain_move": market.explain_move,
     "market.compare": market.compare,
+    "scan.opportunities": scan.opportunities,
     "analytics.arbitrage": analytics.arbitrage,
+    "analytics.risk": analytics.risk,
     "analytics.thesis": analytics.thesis,
     "archive.search": archive.search,
     "archive.status": archive.status,
+    "archive.manifest": archive.manifest,
     "wallet.inspect": wallet.inspect,
     "wallet.whales": wallet.whales,
     "wallet.smart_money": wallet.smart_money,
+    "alerts.create_price_rule": alerts.create_price_rule,
+    "watch.scheduled_scan": watch.scheduled_scan,
 }
 
 

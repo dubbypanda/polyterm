@@ -4,13 +4,14 @@ import asyncio
 import time
 from typing import Dict, List, Optional, Any, Callable
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ..api.gamma import GammaClient
 from ..api.clob import CLOBClient
 from ..utils.json_output import safe_float
 from ..api.aggregator import APIAggregator
 from ..api.market_utils import get_primary_clob_token_id, market_probability_price
+from .archive import ArchiveCollector
 
 
 class MarketSnapshot:
@@ -325,3 +326,231 @@ class MarketScanner:
         mean = sum(prob_changes) / len(prob_changes)
         variance = sum((x - mean) ** 2 for x in prob_changes) / len(prob_changes)
         return variance ** 0.5
+
+
+class MarketOpportunityScanner:
+    """One-shot market scanner for agent opportunity and anomaly workflows."""
+
+    def __init__(
+        self,
+        gamma_client: Optional[GammaClient] = None,
+        archive_status_provider: Optional[Callable[..., Dict[str, Any]]] = None,
+    ):
+        self.gamma = gamma_client or GammaClient()
+        self._archive_status_provider = archive_status_provider
+
+    def scan(
+        self,
+        query: str = "",
+        limit: int = 20,
+        min_volume: float = 1000,
+        min_liquidity: float = 0,
+        max_archive_age_hours: int = 24,
+    ) -> Dict[str, Any]:
+        """Scan active markets for research-worthy opportunities."""
+        errors: List[str] = []
+        quality_flags = ["agent_market_scan", "read_only_scan"]
+        try:
+            markets = self._fetch_markets(query=query, limit=max(limit * 5, 50))
+        except Exception as exc:
+            errors.append(str(exc))
+            markets = []
+            quality_flags.append("live_market_scan_unavailable")
+
+        opportunities = []
+        stale_archive_count = 0
+        for market in markets:
+            if not _is_current_market(market):
+                continue
+
+            item = self._score_market(
+                market,
+                min_volume=min_volume,
+                min_liquidity=min_liquidity,
+                max_archive_age_hours=max_archive_age_hours,
+            )
+            if item["archive_status"] in {"stale", "missing"}:
+                stale_archive_count += 1
+            if item["score"] > 0:
+                opportunities.append(item)
+
+        opportunities.sort(key=lambda row: row["score"], reverse=True)
+        opportunities = opportunities[:limit]
+        if not opportunities:
+            quality_flags.append("no_ranked_opportunities")
+
+        return {
+            "query": query,
+            "limit": limit,
+            "min_volume": min_volume,
+            "min_liquidity": min_liquidity,
+            "max_archive_age_hours": max_archive_age_hours,
+            "scanned_count": len(markets),
+            "opportunity_count": len(opportunities),
+            "stale_archive_count": stale_archive_count,
+            "opportunities": opportunities,
+            "recommended_actions": self._recommended_actions(opportunities),
+            "quality_flags": sorted(set(quality_flags)),
+            "errors": errors,
+            "generated_at": datetime.utcnow().isoformat() + "Z",
+        }
+
+    def _fetch_markets(self, query: str, limit: int) -> List[Dict[str, Any]]:
+        if query:
+            return self.gamma.search_markets(query, limit=limit)
+        if hasattr(self.gamma, "get_markets"):
+            return self.gamma.get_markets(limit=limit)
+        return self.gamma.search_markets("", limit=limit)
+
+    def _score_market(
+        self,
+        market: Dict[str, Any],
+        min_volume: float,
+        min_liquidity: float,
+        max_archive_age_hours: int,
+    ) -> Dict[str, Any]:
+        market_id = str(market.get("id") or market.get("conditionId") or market.get("condition_id") or "")
+        slug = str(market.get("slug") or "")
+        title = str(market.get("question") or market.get("title") or market_id or slug)
+        probability = market_probability_price(market)
+        previous_price = safe_float(
+            market.get("previousYesPrice", market.get("previous_yes_price", market.get("lastDayPrice"))),
+            probability,
+        )
+        volume_24h = safe_float(market.get("volume24hr", market.get("volume24Hr", market.get("volume", 0))))
+        liquidity = safe_float(market.get("liquidity", 0))
+        change_24h = _price_change_pct(probability, previous_price)
+        archive = self._archive_status(
+            query=slug or title,
+            market_id=market_id,
+            max_age_hours=max_archive_age_hours,
+        )
+        archive_status = _archive_research_status(archive)
+
+        signals: List[str] = []
+        score = 0.0
+
+        if abs(change_24h) >= 10:
+            signals.append("fresh_move")
+            score += min(abs(change_24h), 50) * 1.4
+        elif abs(change_24h) >= 5:
+            signals.append("moderate_move")
+            score += abs(change_24h)
+
+        if volume_24h >= min_volume:
+            signals.append("volume_threshold_met")
+            score += min(volume_24h / max(min_volume, 1), 10) * 5
+        if liquidity >= min_liquidity and liquidity > 0:
+            signals.append("liquid_enough")
+            score += min(liquidity / max(min_liquidity or 1, 1), 10) * 3
+        if archive_status in {"stale", "missing"}:
+            signals.append("archive_refresh_needed")
+            score += 15
+        if _has_whale_signal(market):
+            signals.append("whale_context_available")
+            score += 8
+        if volume_24h < min_volume and liquidity < min_liquidity:
+            signals.append("thin_market")
+
+        actions = list(archive.get("recommended_actions") or [])
+        if "fresh_move" in signals or "archive_refresh_needed" in signals:
+            actions.append(f"Run market.research with persist=true for {slug or market_id or title}.")
+        if "thin_market" in signals:
+            actions.append("Treat any apparent edge cautiously because liquidity and volume are thin.")
+
+        return {
+            "market_id": market_id,
+            "slug": slug,
+            "title": title,
+            "probability": round(probability, 6),
+            "previous_probability": round(previous_price, 6),
+            "change_24h": round(change_24h, 6),
+            "volume_24h": volume_24h,
+            "liquidity": liquidity,
+            "score": round(score, 6),
+            "signals": signals,
+            "archive_status": archive_status,
+            "archive_quality_flags": archive.get("quality_flags", []),
+            "recommended_actions": _dedupe(actions),
+            "evidence_sources": [
+                {"type": "gamma_market", "fields": ["outcomePrices", "previousYesPrice", "volume24hr", "liquidity"]},
+                {"type": "archive_status", "market_id": market_id, "max_age_hours": max_archive_age_hours},
+            ],
+            "quality_flags": self._item_quality_flags(market, archive_status),
+        }
+
+    def _archive_status(self, query: str, market_id: str, max_age_hours: int) -> Dict[str, Any]:
+        try:
+            provider = self._archive_status_provider
+            if provider is None:
+                provider = ArchiveCollector().status
+            return provider(query=query, market_id=market_id, max_age_hours=max_age_hours)
+        except Exception as exc:
+            return {
+                "freshness": {"research_briefs": {"status": "unknown"}},
+                "recommended_actions": [],
+                "quality_flags": ["archive_status_unavailable", str(exc)],
+            }
+
+    def _item_quality_flags(self, market: Dict[str, Any], archive_status: str) -> List[str]:
+        flags = ["live_gamma_market"]
+        if not market.get("volume24hr") and not market.get("volume24Hr"):
+            flags.append("missing_24h_volume")
+        if not market.get("previousYesPrice"):
+            flags.append("missing_previous_price")
+        if archive_status in {"stale", "missing", "unknown"}:
+            flags.append(f"{archive_status}_archive")
+        return flags
+
+    def _recommended_actions(self, opportunities: List[Dict[str, Any]]) -> List[str]:
+        actions = []
+        for item in opportunities[:5]:
+            actions.extend(item.get("recommended_actions", []))
+        return _dedupe(actions)
+
+
+def _price_change_pct(current: float, previous: float) -> float:
+    if previous <= 0:
+        return 0.0
+    return ((current - previous) / previous) * 100
+
+
+def _archive_research_status(archive: Dict[str, Any]) -> str:
+    freshness = archive.get("freshness") or {}
+    brief_status = freshness.get("research_briefs") or {}
+    return str(brief_status.get("status") or "unknown")
+
+
+def _has_whale_signal(market: Dict[str, Any]) -> bool:
+    return bool(
+        market.get("whale_activity")
+        or market.get("largeTrades")
+        or market.get("smartMoney")
+        or market.get("smart_money")
+    )
+
+
+def _dedupe(values: List[str]) -> List[str]:
+    seen = set()
+    output = []
+    for value in values:
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        output.append(value)
+    return output
+
+
+def _is_current_market(market: Dict[str, Any]) -> bool:
+    if not market.get("active", True) or market.get("closed", False):
+        return False
+    end_date = market.get("endDate") or market.get("end_date_iso")
+    if not end_date:
+        return True
+    try:
+        parsed = datetime.fromisoformat(str(end_date).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed > datetime.now(timezone.utc)
+    except Exception:
+        return True

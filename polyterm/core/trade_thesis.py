@@ -75,7 +75,8 @@ class TradeThesisEngine:
         else:
             risks.append("No cached whale flow for this market; run wallet.whales to enrich local evidence.")
 
-        confidence = self._confidence(probability, orderbook, risk, local_history)
+        confidence_model = self._confidence_model(market_data, probability, orderbook, risk, local_history, whale_flow)
+        confidence = confidence_model["confidence"]
         evidence_sources = self._evidence_sources(market_data, orderbook, risk, local_history, whale_flow)
 
         return {
@@ -94,6 +95,8 @@ class TradeThesisEngine:
             "thesis": {
                 "direction": signal_direction,
                 "confidence": confidence,
+                "confidence_inputs": confidence_model["inputs"],
+                "confidence_reasoning": confidence_model["reasoning"],
                 "summary": self._summary(signal_direction, confidence, risks),
                 "evidence": evidence,
                 "risks": risks,
@@ -132,6 +135,8 @@ class TradeThesisEngine:
             best_bid = float(bids[0].get("price", 0)) if bids else 0.0
             best_ask = float(asks[0].get("price", 0)) if asks else 0.0
             spread = best_ask - best_bid if best_ask and best_bid else None
+            bid_depth = sum(float(level.get("size", 0) or 0) for level in bids)
+            ask_depth = sum(float(level.get("size", 0) or 0) for level in asks)
             return {
                 "available": True,
                 "token_id": token_id,
@@ -140,6 +145,8 @@ class TradeThesisEngine:
                 "spread": spread,
                 "bid_levels": len(bids),
                 "ask_levels": len(asks),
+                "bid_depth": bid_depth,
+                "ask_depth": ask_depth,
             }
         except Exception as exc:
             return {"available": False, "token_id": token_id, "spread": None, "quality": str(exc)}
@@ -279,17 +286,137 @@ class TradeThesisEngine:
             },
         ]
 
-    def _confidence(self, probability: float, orderbook: Dict[str, Any], risk: Dict[str, Any], local_history: Dict[str, Any]) -> float:
-        score = 0.35
-        if probability and (probability >= 0.65 or probability <= 0.35):
-            score += 0.15
-        if orderbook.get("available"):
-            score += 0.15
-        if risk.get("overall_grade") in {"A", "B", "C"}:
-            score += 0.15
-        if local_history.get("data_points", 0) >= 3:
+    def _confidence_model(
+        self,
+        market_data: Dict[str, Any],
+        probability: float,
+        orderbook: Dict[str, Any],
+        risk: Dict[str, Any],
+        local_history: Dict[str, Any],
+        whale_flow: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Return confidence score, inputs, and agent-readable reasoning."""
+        liquidity = _as_float(market_data.get("liquidity"))
+        volume_24h = _as_float(
+            market_data.get("volume24hr")
+            or market_data.get("volume24Hr")
+            or market_data.get("volume")
+        )
+        spread = orderbook.get("spread")
+        bid_levels = int(orderbook.get("bid_levels") or 0)
+        ask_levels = int(orderbook.get("ask_levels") or 0)
+        depth_levels = bid_levels + ask_levels
+        history_points = int(local_history.get("data_points") or 0)
+        latest_probability = local_history.get("latest_probability")
+        oldest_probability = local_history.get("oldest_probability")
+        history_move = (
+            float(latest_probability) - float(oldest_probability)
+            if latest_probability is not None and oldest_probability is not None
+            else None
+        )
+        risk_score = risk.get("overall_score")
+        resolution_score = _risk_factor_score(risk, "resolution_clarity")
+        whale_count = int(whale_flow.get("trade_count") or 0)
+        whale_notional = _as_float(whale_flow.get("total_notional"))
+
+        inputs = {
+            "probability": probability,
+            "directional_probability": bool(probability and (probability >= 0.65 or probability <= 0.35)),
+            "liquidity": liquidity,
+            "volume_24h": volume_24h,
+            "volume_quality": _volume_quality(volume_24h, liquidity),
+            "orderbook_available": bool(orderbook.get("available")),
+            "spread": spread,
+            "orderbook_depth_levels": depth_levels,
+            "bid_depth": _as_float(orderbook.get("bid_depth")),
+            "ask_depth": _as_float(orderbook.get("ask_depth")),
+            "history_data_points": history_points,
+            "history_move": history_move,
+            "archive_freshness": "fresh" if history_points >= 3 else "thin",
+            "whale_trade_count": whale_count,
+            "whale_total_notional": whale_notional,
+            "risk_grade": risk.get("overall_grade"),
+            "risk_score": risk_score,
+            "resolution_clarity_score": resolution_score,
+        }
+
+        score = 0.25
+        reasoning: List[str] = []
+
+        if inputs["directional_probability"]:
             score += 0.10
-        return round(min(score, 0.95), 2)
+            reasoning.append("Probability is directional enough to support a non-neutral thesis.")
+        else:
+            reasoning.append("Probability is near balanced, so directional confidence starts lower.")
+
+        if liquidity >= 100000:
+            score += 0.10
+            reasoning.append("Liquidity is strong for analysis and execution context.")
+        elif liquidity >= 10000:
+            score += 0.05
+            reasoning.append("Liquidity is usable but not deep.")
+        else:
+            reasoning.append("Liquidity is thin or unavailable.")
+
+        if orderbook.get("available") and spread is not None and spread <= 0.03:
+            score += 0.10
+            reasoning.append("Order book is available with a tight spread.")
+        elif orderbook.get("available"):
+            score += 0.05
+            reasoning.append("Order book is available, but spread quality is weaker.")
+        else:
+            reasoning.append("Order book is unavailable.")
+
+        if depth_levels >= 10:
+            score += 0.05
+            reasoning.append("Order book has multiple visible depth levels.")
+        elif depth_levels >= 2:
+            score += 0.03
+            reasoning.append("Order book has limited but usable visible depth.")
+
+        if history_points >= 3:
+            score += 0.08
+            reasoning.append("Local archive has enough recent history to support freshness checks.")
+        else:
+            reasoning.append("Local archive history is thin.")
+
+        if whale_count:
+            score += 0.08
+            reasoning.append("Cached whale flow is available for this market.")
+        else:
+            reasoning.append("Cached whale flow is unavailable.")
+
+        if isinstance(risk_score, int) and risk_score <= 30:
+            score += 0.10
+            reasoning.append("Risk score is low.")
+        elif isinstance(risk_score, int) and risk_score <= 50:
+            score += 0.06
+            reasoning.append("Risk score is moderate.")
+        elif isinstance(risk_score, int) and risk_score >= 70:
+            score -= 0.05
+            reasoning.append("Risk score is high.")
+
+        if volume_24h >= 10000:
+            score += 0.08
+            reasoning.append("24h volume is strong.")
+        elif volume_24h >= 1000:
+            score += 0.04
+            reasoning.append("24h volume is present but modest.")
+        else:
+            reasoning.append("24h volume is low or unavailable.")
+
+        if resolution_score is not None and resolution_score <= 30:
+            score += 0.05
+            reasoning.append("Resolution clarity supports confidence.")
+        elif resolution_score is not None and resolution_score >= 60:
+            score -= 0.05
+            reasoning.append("Resolution clarity is a confidence drag.")
+
+        return {
+            "confidence": round(max(0.05, min(score, 0.95)), 2),
+            "inputs": inputs,
+            "reasoning": reasoning,
+        }
 
     def _summary(self, direction: str, confidence: float, risks: list) -> str:
         risk_note = " with notable caveats" if risks else ""
@@ -338,6 +465,36 @@ def _trade_matches_market(trade: Any, identifiers: set[str]) -> bool:
             getattr(trade, "market_slug", ""),
         )
     )
+
+
+def _as_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value if value is not None else default)
+    except (TypeError, ValueError):
+        return default
+
+
+def _volume_quality(volume_24h: float, liquidity: float) -> str:
+    if volume_24h <= 0:
+        return "missing"
+    if liquidity > 0 and volume_24h / liquidity > 5:
+        return "high_turnover"
+    if volume_24h >= 10000:
+        return "strong"
+    if volume_24h >= 1000:
+        return "modest"
+    return "thin"
+
+
+def _risk_factor_score(risk: Dict[str, Any], factor: str) -> Optional[int]:
+    factors = risk.get("factors") or {}
+    if isinstance(factors, dict):
+        value = factors.get(factor, {}).get("score")
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+    return None
 
 
 def _prefer_active_market(markets: list) -> Dict[str, Any]:

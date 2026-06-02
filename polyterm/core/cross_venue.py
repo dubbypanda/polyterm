@@ -61,14 +61,19 @@ class CrossVenueMonitor:
                     continue
                 spread = abs(poly.yes_price - other.yes_price)
                 if spread >= min_spread:
+                    fee_adjusted_spread = max(spread - 0.02, 0)
+                    quality = self._opportunity_quality(poly, other, confidence, spread, fee_adjusted_spread)
                     opportunities.append({
                         "polymarket": poly.to_dict(),
                         "other": other.to_dict(),
                         "spread": spread,
                         "spread_pct": spread * 100,
                         "match_confidence": round(confidence, 2),
-                        "fee_adjusted_spread": max(spread - 0.02, 0),
-                        "quality_flags": self._quality_flags(other, confidence),
+                        "fee_adjusted_spread": fee_adjusted_spread,
+                        "spread_confidence": quality["spread_confidence"],
+                        "execution_caveats": quality["execution_caveats"],
+                        "resolution_caveats": quality["resolution_caveats"],
+                        "quality_flags": quality["quality_flags"],
                     })
         opportunities.sort(key=lambda row: (row["fee_adjusted_spread"], row["match_confidence"]), reverse=True)
         return {
@@ -134,3 +139,67 @@ class CrossVenueMonitor:
             flags.append("stale_external_data")
         flags.append("fee_estimate_only")
         return flags
+
+    def _opportunity_quality(
+        self,
+        left: VenueMarket,
+        right: VenueMarket,
+        confidence: float,
+        spread: float,
+        fee_adjusted_spread: float,
+    ) -> Dict[str, Any]:
+        """Return agent-readable confidence, caveats, and quality flags."""
+        quality_flags = self._quality_flags(right, confidence)
+        execution_caveats = [
+            "PolyTerm is read-only and does not execute trades.",
+            "Venue fee models, collateral, settlement, eligibility, and liquidity can differ.",
+            "Fee-adjusted spread uses a coarse estimate and excludes slippage and fill risk.",
+        ]
+        resolution_caveats = []
+
+        if left.venue != right.venue:
+            quality_flags.append("venue_mismatch")
+
+        if confidence < 0.65:
+            quality_flags.append("resolution_mismatch_possible")
+            resolution_caveats.append(
+                "Market titles are only a loose text match; manually verify equivalent resolution criteria."
+            )
+
+        if left.stale or right.stale:
+            if "stale_external_data" not in quality_flags:
+                quality_flags.append("stale_external_data")
+            execution_caveats.append("One venue row is marked stale; refresh venue data before relying on the spread.")
+
+        if fee_adjusted_spread <= 0:
+            quality_flags.append("fees_may_consume_spread")
+            execution_caveats.append("Estimated fees may consume the observed spread.")
+
+        quality_flags.append("no_trade_execution")
+        spread_confidence = self._spread_confidence(confidence, spread, fee_adjusted_spread, left.stale or right.stale)
+        return {
+            "spread_confidence": spread_confidence,
+            "execution_caveats": _dedupe(execution_caveats),
+            "resolution_caveats": _dedupe(resolution_caveats),
+            "quality_flags": _dedupe(quality_flags),
+        }
+
+    def _spread_confidence(self, match_confidence: float, spread: float, fee_adjusted_spread: float, stale: bool) -> str:
+        if stale or match_confidence < 0.65:
+            return "low"
+        if match_confidence >= 0.80 and fee_adjusted_spread >= 0.025 and spread >= 0.05:
+            return "high"
+        if fee_adjusted_spread > 0:
+            return "medium"
+        return "low"
+
+
+def _dedupe(values: List[str]) -> List[str]:
+    seen = set()
+    output = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        output.append(value)
+    return output
