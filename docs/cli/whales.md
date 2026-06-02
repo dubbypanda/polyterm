@@ -71,7 +71,9 @@ polyterm whales --format json
 polyterm whales --wallets --min-amount 100000 --hours 72 --limit 5 --format json
 ```
 
-The wallet mode calls Data API `/trades` with `filterType=CASH` and `filterAmount=<min-amount>`, then filters by timestamp and returns both top trades and wallet rollups. Its JSON output includes wallet address, trade count, notional value, largest trade, top markets, rows/pages scanned, and quality flags.
+The wallet mode calls Data API `/trades` with `filterType=CASH` and `filterAmount=<min-amount>`, then filters by timestamp and returns both top trades and wallet rollups. Its JSON output includes wallet address, trade count, notional value, largest trade, top markets, rows/pages scanned, `cached_trade_count`, and quality flags.
+
+Each live wallet-mode lookup also logs matching public whale trades into the local SQLite `trades` table and upserts whale wallet summaries into `wallets`. Re-running the same lookup does not duplicate rows when transaction hashes are present.
 
 Use `--local` only when you explicitly want the older local SQLite observed-trades cache:
 

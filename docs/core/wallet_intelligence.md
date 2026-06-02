@@ -41,6 +41,8 @@ The module calls `DataAPIClient.get_wallet_profile()` for public positions, trad
 
 Local DB rows are used as a fallback and enrichment source. If refresh data exists, the module upserts a `Wallet` row with volume, win rate, average size, largest trade, and tags such as `whale`, `smart_money`, or `concentrated`.
 
+`live_whales()` also logs the Data API whale-query result set locally: it upserts whale wallet summaries into `wallets` and inserts each matching public trade into `trades`. Trade caching is idempotent when a transaction hash is available, keyed by transaction hash + wallet + market, so repeated natural-language lookups enrich the local store without duplicating rows.
+
 ## Data Sources
 
 - Data API `/positions`

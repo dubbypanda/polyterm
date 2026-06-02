@@ -839,9 +839,27 @@ class Database:
     # Trade operations
 
     def insert_trade(self, trade: Trade) -> int:
-        """Insert a trade and return its ID"""
+        """Insert a trade and return its ID.
+
+        Public API refreshes may see the same trade repeatedly. When a
+        transaction hash is available, treat (tx_hash, wallet, market) as a
+        natural key so cache/log refreshes are idempotent.
+        """
         with self._get_connection() as conn:
             cursor = conn.cursor()
+            if trade.tx_hash:
+                cursor.execute(
+                    """
+                    SELECT id FROM trades
+                    WHERE tx_hash = ? AND wallet_address = ? AND market_id = ?
+                    LIMIT 1
+                    """,
+                    (trade.tx_hash, trade.wallet_address, trade.market_id),
+                )
+                existing = cursor.fetchone()
+                if existing:
+                    return int(existing["id"])
+
             cursor.execute("""
                 INSERT INTO trades (
                     market_id, market_slug, wallet_address, side, outcome,

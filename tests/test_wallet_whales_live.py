@@ -14,8 +14,19 @@ class FakeDataAPI:
 
 
 class FakeDatabase:
+    def __init__(self):
+        self.trades = []
+        self.wallets = []
+
     def get_large_trades(self, min_notional=10000, hours=24):
         return []
+
+    def insert_trade(self, trade):
+        self.trades.append(trade)
+        return len(self.trades)
+
+    def upsert_wallet(self, wallet):
+        self.wallets.append(wallet)
 
 
 def test_live_whales_returns_public_trades_and_wallet_rollups_by_timeframe():
@@ -112,3 +123,50 @@ def test_live_whales_limits_displayed_trades_without_hiding_wallet_rollups():
     assert result["trade_count"] == 3
     assert [trade["wallet"] for trade in result["trades"]] == ["0xaaa", "0xaaa"]
     assert [wallet["address"] for wallet in result["wallets"]] == ["0xaaa", "0xbbb"]
+
+
+def test_live_whales_logs_public_trade_results_to_local_database():
+    now = datetime(2026, 6, 2, 17, 0, 0, tzinfo=timezone.utc)
+    recent_ts = int((now - timedelta(hours=1)).timestamp())
+    pages = {
+        0: [
+            {
+                "proxyWallet": "0xaaa",
+                "side": "BUY",
+                "size": 200_000,
+                "price": 0.75,
+                "timestamp": recent_ts,
+                "title": "Fed cuts rates in June?",
+                "slug": "fed-cuts-rates-in-june",
+                "conditionId": "condition-1",
+                "outcome": "Yes",
+                "transactionHash": "0xtrade1",
+            },
+            {
+                "proxyWallet": "0xbbb",
+                "side": "SELL",
+                "size": 150_000,
+                "price": 0.80,
+                "timestamp": recent_ts,
+                "title": "Will BTC hit 80k?",
+                "slug": "btc-80k",
+                "conditionId": "condition-2",
+                "outcome": "No",
+                "transactionHash": "0xtrade2",
+            },
+        ],
+        1000: [],
+    }
+    db = FakeDatabase()
+    engine = WalletIntelligence(data_api=FakeDataAPI(pages), database=db)
+
+    result = engine.live_whales(min_notional=100_000, hours=72, limit=1, now=now, page_size=1000)
+
+    assert result["cached_trade_count"] == 2
+    assert {trade.tx_hash for trade in db.trades} == {"0xtrade1", "0xtrade2"}
+    assert db.trades[0].market_id == "condition-1"
+    assert db.trades[0].market_slug == "fed-cuts-rates-in-june"
+    assert db.trades[0].wallet_address == "0xaaa"
+    assert db.trades[0].notional == 150_000
+    assert {wallet.address for wallet in db.wallets} == {"0xaaa", "0xbbb"}
+    assert all("whale" in wallet.tags for wallet in db.wallets)

@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from ..api.data_api import DataAPIClient
 from ..db.database import Database
-from ..db.models import Wallet
+from ..db.models import Trade, Wallet
 
 
 def _as_float(value: Any, default: float = 0.0) -> float:
@@ -252,6 +252,7 @@ class WalletIntelligence:
             wallets.append(item)
         wallets.sort(key=lambda row: row["notional"], reverse=True)
         displayed_wallets = wallets[:limit]
+        cached_trade_count = self._cache_live_whale_results(trades, wallets)
 
         quality_flags = ["public_data_api", "trade_direction_may_be_inferred"]
         if not stopped_at_cutoff:
@@ -266,10 +267,67 @@ class WalletIntelligence:
             "wallet_count": len(wallets),
             "rows_scanned": rows_scanned,
             "pages_scanned": pages_scanned,
+            "cached_trade_count": cached_trade_count,
             "wallets": displayed_wallets,
             "trades": displayed_trades,
             "quality_flags": quality_flags,
         }
+
+    def _cache_live_whale_results(self, trades: List[Dict[str, Any]], wallets: List[Dict[str, Any]]) -> int:
+        """Persist live Data API whale query results into the local SQLite cache."""
+        cached = 0
+        for item in wallets:
+            address = str(item.get("address") or "")
+            if not address or address == "unknown":
+                continue
+            favorite_markets = [market for market, _count in item.get("top_markets", [])]
+            trade_count = int(item.get("trade_count") or 0)
+            total_volume = _as_float(item.get("notional"))
+            largest_trade = _as_float(item.get("largest_trade"))
+            existing = self.db.get_wallet(address) if hasattr(self.db, "get_wallet") else None
+            tags = set(existing.tags if existing else [])
+            tags.add("whale")
+            wallet = existing or Wallet(address=address, first_seen=datetime.now())
+            wallet.total_trades = max(wallet.total_trades, trade_count)
+            wallet.total_volume = max(wallet.total_volume, total_volume)
+            wallet.avg_position_size = max(
+                wallet.avg_position_size,
+                total_volume / trade_count if trade_count else 0.0,
+            )
+            wallet.largest_trade = max(wallet.largest_trade, largest_trade)
+            wallet.favorite_markets = sorted(set(wallet.favorite_markets) | set(favorite_markets))
+            wallet.tags = sorted(tags)
+            wallet.updated_at = datetime.now()
+            self.db.upsert_wallet(wallet)
+
+        for trade in trades:
+            wallet = str(trade.get("wallet") or "unknown")
+            if not wallet or wallet == "unknown":
+                continue
+            timestamp = trade.get("timestamp")
+            if isinstance(timestamp, (int, float)) and timestamp:
+                trade_time = datetime.fromtimestamp(timestamp)
+            else:
+                trade_time = datetime.now()
+
+            self.db.insert_trade(
+                Trade(
+                    market_id=str(trade.get("condition_id") or trade.get("slug") or trade.get("asset") or ""),
+                    market_slug=str(trade.get("slug") or ""),
+                    wallet_address=wallet,
+                    side=str(trade.get("side") or ""),
+                    outcome=str(trade.get("outcome") or ""),
+                    price=_as_float(trade.get("price")),
+                    size=_as_float(trade.get("size")),
+                    notional=_as_float(trade.get("notional")),
+                    timestamp=trade_time,
+                    tx_hash=str(trade.get("transaction_hash") or ""),
+                    taker_address=wallet,
+                )
+            )
+            cached += 1
+
+        return cached
 
     def consensus_moves(self, trades: List[Dict[str, Any]], min_wallets: int = 3) -> List[Dict[str, Any]]:
         """Find markets where multiple wallets recently traded the same outcome."""

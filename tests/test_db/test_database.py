@@ -161,6 +161,28 @@ class TestDatabase:
         trades = temp_db.get_trades_by_market("market1")
         assert len(trades) == 1
 
+    def test_insert_trade_deduplicates_by_transaction_hash_wallet_and_market(self, temp_db):
+        """Live API cache refreshes should not duplicate the same public trade."""
+        wallet = Wallet(address="0xtrader", first_seen=datetime.now())
+        temp_db.upsert_wallet(wallet)
+        trade = Trade(
+            market_id="market1",
+            wallet_address="0xtrader",
+            side="BUY",
+            outcome="YES",
+            price=0.65,
+            size=1000,
+            notional=650.0,
+            timestamp=datetime.now(),
+            tx_hash="0xduplicate",
+        )
+
+        first_id = temp_db.insert_trade(trade)
+        second_id = temp_db.insert_trade(trade)
+
+        assert second_id == first_id
+        assert len(temp_db.get_trades_by_wallet("0xtrader")) == 1
+
     def test_large_trades(self, temp_db):
         """Test getting large (whale) trades"""
         # Create wallets first (foreign key constraint)
