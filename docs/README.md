@@ -159,14 +159,14 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [predictions](tui/screens/predictions.md) | Predictions | 10/pred | TUI |
 | [presets_screen](tui/screens/presets_screen.md) | Screener presets | pr | TUI |
 | [pricealert_screen](tui/screens/pricealert_screen.md) | Price alerts | pa | TUI |
-| [quick_screen](tui/screens/quick_screen.md) | Quick update | u | TUI |
+| [quick_screen](tui/screens/quick_screen.md) | Quick update | qk | TUI |
 | [quicktrade_screen](tui/screens/quicktrade_screen.md) | Quick trade | qt | TUI |
 | [recent_screen](tui/screens/recent_screen.md) | Recent markets | rec | TUI |
 | [report_screen](tui/screens/report_screen.md) | Reports | - | TUI |
 | [rewards_screen](tui/screens/rewards_screen.md) | Rewards estimates | rw | TUI |
 | [risk_screen](tui/screens/risk_screen.md) | Risk assessment | 14/risk | TUI |
 | [scenario_screen](tui/screens/scenario_screen.md) | Scenario analysis | - | TUI |
-| [screener_screen](tui/screens/screener_screen.md) | Market screener | sr | TUI |
+| [screener_screen](tui/screens/screener_screen.md) | Market screener | scr | TUI |
 | [search_screen](tui/screens/search_screen.md) | Advanced search | sr | TUI |
 | [sentiment_screen](tui/screens/sentiment_screen.md) | Sentiment analysis | sent | TUI |
 | [settings](tui/screens/settings.md) | Settings | 8/s | TUI |
@@ -269,7 +269,7 @@ polyterm/
 **Key Patterns**:
 - **API Fallback**: `APIAggregator` tries Gamma API first, falls back to CLOB
 - **TUI → CLI**: Most TUI screens launch CLI commands via subprocess
-- **WebSocket**: Live monitor uses RTDS WebSocket with polling fallback
+- **WebSocket**: Live monitor uses the CLOB market WebSocket with polling fallback
 - **Config**: TOML-based at `~/.polyterm/config.toml` with dot notation access
 - **Database**: SQLite at `~/.polyterm/data.db` with context manager pattern
 

@@ -22,6 +22,7 @@ from rich.markup import escape
 from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
 from ...api.aggregator import APIAggregator
+from ...api.market_utils import get_clob_token_ids, get_market_condition_id
 from ...core.scanner import MarketScanner
 from ...utils.formatting import format_probability_rich, format_volume
 from ...utils.errors import handle_api_error
@@ -431,20 +432,28 @@ class LiveMarketMonitor:
                 self.console.print(f"[red]❌ No markets found for category: {self.category}[/red]")
                 return
 
-            # Extract market slugs for RTDS WebSocket stream registration
+            # Extract token IDs for CLOB market WebSocket stream registration
             market_slugs = []
+            token_ids = []
             market_titles = {}
             market_prices = {}
 
             for market in markets_data:
                 market_slug = market.get("slug")
                 market_id = market.get("id")
+                condition_id = get_market_condition_id(market)
                 title = market.get("question", market.get("title", "Unknown"))
                 if market_slug:
                     market_slugs.append(market_slug)
                     market_titles[market_slug] = title
                     if market_id:
                         market_titles[market_id] = title
+                    if condition_id:
+                        market_titles[condition_id] = title
+
+                for token_id in get_clob_token_ids(market):
+                    token_ids.append(token_id)
+                    market_titles[token_id] = title
 
                 # Store initial prices
                 outcome_prices = market.get('outcomePrices')
@@ -459,7 +468,7 @@ class LiveMarketMonitor:
 
             self.market_titles = market_titles
             self.market_prices = market_prices
-            self.markets_count = len(market_slugs)
+            self.markets_count = len(token_ids) or len(market_slugs)
             self._dashboard_started_at = datetime.now(timezone.utc)
             self._add_status_message("Starting live trade monitor", "cyan")
 
@@ -472,7 +481,7 @@ class LiveMarketMonitor:
             ) as live_display:
                 self._live_display = live_display
                 self._refresh_live_dashboard()
-                asyncio.run(self._run_websocket_monitor(market_slugs, market_titles))
+                asyncio.run(self._run_websocket_monitor(token_ids, market_titles))
 
         except KeyboardInterrupt:
             self.console.print(f"\n[yellow]🔴 Live monitoring stopped[/yellow]")
@@ -559,7 +568,7 @@ class LiveMarketMonitor:
         if not self.recent_trades:
             table.add_row(
                 "--:--:--",
-                Text("Waiting for RTDS trades...", style="dim"),
+                Text("Waiting for CLOB trade events...", style="dim"),
                 Text(""),
                 Text(""),
                 Text(""),
@@ -632,8 +641,8 @@ class LiveMarketMonitor:
         self.status_messages = self.status_messages[-self.max_status_messages :]
         self._refresh_live_dashboard()
 
-    async def _run_websocket_monitor(self, market_slugs: List[str], market_titles: Dict[str, str]):
-        """Run WebSocket monitoring for live trades"""
+    async def _run_websocket_monitor(self, token_ids: List[str], market_titles: Dict[str, str]):
+        """Run WebSocket monitoring for live trades."""
         try:
             # Connect to WebSocket
             self._ws_status = "reconnecting"
@@ -641,24 +650,16 @@ class LiveMarketMonitor:
             await self.clob_client.connect_websocket()
             self._ws_status = "connected"
             self._ws_reconnect_attempt = 0
-            self._add_status_message("Connected to PolyMarket RTDS WebSocket", "green")
+            self._add_status_message("Connected to Polymarket CLOB market WebSocket", "green")
 
-            # When monitoring a category, subscribe to ALL trades and filter client-side
-            # This is because RTDS slugs may not match Gamma API slugs exactly
-            if self.category:
-                # Subscribe to all trades, we'll filter by category keywords
-                await self.clob_client.subscribe_to_trades([], lambda trade: self._handle_trade(trade, market_titles))
-                self._add_status_message(
-                    f"Monitoring {self.category.upper()} trades with keyword filtering",
-                    "green",
-                )
-            else:
-                # For specific markets or all markets, use slug-based stream registration
-                await self.clob_client.subscribe_to_trades(market_slugs, lambda trade: self._handle_trade(trade, market_titles))
-                self._add_status_message(
-                    f"Subscribed to {len(market_slugs)} market feeds",
-                    "green",
-                )
+            await self.clob_client.subscribe_to_trades(
+                token_ids,
+                lambda trade: self._handle_trade(trade, market_titles),
+            )
+            self._add_status_message(
+                f"Subscribed to {len(token_ids)} token feeds",
+                "green",
+            )
 
             # Start listening for trades
             await self.clob_client.listen_for_trades(on_error=self._handle_ws_error)
@@ -667,12 +668,12 @@ class LiveMarketMonitor:
             self._ws_status = "polling"
             self._add_status_message(f"WebSocket error: {e}", "red")
             self._add_status_message("Falling back to REST polling mode", "yellow")
-            await self._run_polling_monitor(market_slugs, market_titles)
+            await self._run_polling_monitor(list(market_titles.keys()), market_titles)
         finally:
             await self.clob_client.close_websocket()
 
     def _handle_ws_error(self, exc: Exception):
-        """Update dashboard state when the RTDS client reports reconnect trouble."""
+        """Update dashboard state when the CLOB client reports reconnect trouble."""
         self._ws_status = "reconnecting"
         self._ws_reconnect_attempt = min(
             self._ws_reconnect_attempt + 1,
@@ -681,11 +682,12 @@ class LiveMarketMonitor:
         self._add_status_message(str(exc), "yellow")
 
     async def _handle_trade(self, trade_data: Dict[str, Any], market_titles: Dict[str, str]):
-        """Handle incoming trade data from RTDS"""
+        """Handle incoming trade data from the CLOB market websocket."""
         try:
             timestamp = datetime.now(timezone.utc).strftime("%H:%M:%S")
 
-            # RTDS format: {topic, type, payload: {eventSlug, slug, price, size, side, ...}}
+            # Normalized CLOB format:
+            # {topic, type, payload: {market, asset_id, price, size, side, ...}}
             payload = trade_data.get("payload", {})
             if not payload:
                 return
@@ -954,7 +956,7 @@ class LiveMarketMonitor:
 @click.command()
 @click.option("--market", help="Market ID or slug to monitor")
 @click.option("--category", help="Category to monitor (crypto, politics, sports, etc.)")
-@click.option("--interactive", is_flag=True, help="Interactive market/category selection")
+@click.option("-i", "--interactive", is_flag=True, help="Interactive market/category selection")
 @click.pass_context
 def live_monitor(ctx, market, category, interactive):
     """Launch dedicated live market monitor in new terminal window"""

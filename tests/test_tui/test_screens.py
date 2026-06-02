@@ -68,7 +68,7 @@ def test_analytics_screen_trending(mock_config, mock_gamma, mock_clob, mock_aggr
     mock_config_instance.gamma_base_url = "https://gamma-api.polymarket.com"
     mock_config_instance.gamma_api_key = ""
     mock_config_instance.clob_rest_endpoint = "https://clob.polymarket.com"
-    mock_config_instance.clob_endpoint = "wss://ws-live-data.polymarket.com"
+    mock_config_instance.clob_endpoint = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
     mock_config.return_value = mock_config_instance
 
     # Mock aggregator to return sample markets

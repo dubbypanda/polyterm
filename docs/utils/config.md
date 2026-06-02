@@ -48,7 +48,7 @@ The class exposes frequently accessed values as read-only properties to avoid do
 | `gamma_api_key` | `api.gamma_api_key` | `""` |
 | `gamma_base_url` | `api.gamma_base_url` | `https://gamma-api.polymarket.com` |
 | `gamma_markets_endpoint` | `api.gamma_markets_endpoint` | `/events` |
-| `clob_endpoint` | `api.clob_endpoint` | `wss://ws-live-data.polymarket.com` |
+| `clob_endpoint` | `api.clob_endpoint` | `wss://ws-subscriptions-clob.polymarket.com/ws/market` |
 | `clob_rest_endpoint` | `api.clob_rest_endpoint` | `https://clob.polymarket.com` |
 | `subgraph_endpoint` | `api.subgraph_endpoint` | Thegraph URL |
 | `kalshi_api_key` | `api.kalshi_api_key` | `""` |

@@ -100,7 +100,7 @@ async def test_live_dashboard_category_filter_skips_unmatched_trades():
 
     output = render_dashboard_text(monitor)
     assert "Trades: 0" in output
-    assert "Waiting for RTDS trades" in output
+    assert "Waiting for CLOB trade events" in output
 
 
 def test_live_dashboard_status_messages_are_capped():

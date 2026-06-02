@@ -4,7 +4,7 @@
 
 ## Overview
 
-The `CLOBClient` class provides access to Polymarket's CLOB V2 API via both REST endpoints and two separate WebSocket connections. The production REST host remains `https://clob.polymarket.com`. The REST interface covers order books, price history, price/spread/last-trade helpers, fee-rate lookup, sampling markets, and order-book-derived depth. The RTDS (Real-Time Data Service) WebSocket streams live trade activity, while the CLOB Order Book WebSocket streams real-time order book updates and market resolution events. The client includes a two-tier supervisor pattern for WebSocket resilience.
+The `CLOBClient` class provides access to Polymarket's CLOB V2 API via REST endpoints and the public CLOB market WebSocket. The production REST host remains `https://clob.polymarket.com`. The REST interface covers order books, price history, price/spread/last-trade helpers, fee-rate lookup, sampling markets, and order-book-derived depth. The CLOB market WebSocket streams live trade executions, order book updates, price changes, and market resolution events. The client includes a two-tier supervisor pattern for WebSocket resilience.
 
 ## Key Classes and Functions
 
@@ -17,14 +17,14 @@ Client for the Polymarket CLOB API, managing both REST requests and WebSocket co
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `rest_endpoint` | `str` | `"https://clob.polymarket.com"` | CLOB REST API base URL |
-| `ws_endpoint` | `str` | `"wss://ws-live-data.polymarket.com"` | RTDS WebSocket URL for trade feeds |
+| `ws_endpoint` | `str` | `"wss://ws-subscriptions-clob.polymarket.com/ws/market"` | CLOB market WebSocket URL for trade feeds |
 
 #### Instance Attributes
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
 | `session` | `requests.Session` | Persistent HTTP session for REST calls |
-| `ws_connection` | WebSocket or `None` | RTDS WebSocket connection |
+| `ws_connection` | WebSocket or `None` | CLOB market WebSocket connection |
 | `clob_ws` | WebSocket or `None` | CLOB order book WebSocket connection |
 | `subscriptions` | `dict` | Map of market slugs to trade callbacks |
 | `_ws_permanently_failed` | `bool` | Set to `True` when supervisor exhausts all retries |
@@ -40,19 +40,19 @@ Client for the Polymarket CLOB API, managing both REST requests and WebSocket co
 | `get_last_trade_price` | `(token_id: str) -> Dict[str, Any]` | Get latest trade price and side for a token |
 | `get_fee_rate` | `(token_id: str) -> Dict[str, Any]` | Get CLOB fee-rate metadata for a token |
 | `get_ticker` | `(token_id: str) -> Dict[str, Any]` | Compatibility helper composed from V2 last-trade and spread endpoints |
-| `get_recent_trades` | `(market: str, limit: int = 100) -> List[Dict[str, Any]]` | Get trades via V2 `/trades`; unauthenticated callers should prefer RTDS when public trade history is restricted |
+| `get_recent_trades` | `(market: str, limit: int = 100) -> List[Dict[str, Any]]` | Authenticated CLOB `/trades` compatibility helper; public history should use Data API `/trades` |
 | `get_market_depth` | `(token_id: str) -> Dict[str, Any]` | Derive depth statistics from `/book` |
 | `get_current_markets` | `(limit: int = 100) -> List[Dict[str, Any]]` | Get active markets via paginated `/sampling-markets` endpoint |
 | `calculate_spread` | `(order_book: Dict[str, Any]) -> float` | Calculate bid-ask spread percentage from order book data |
 | `is_market_current` | `(market: Dict[str, Any]) -> bool` | Check if a market is current (future end date, not closed) |
 | `detect_large_trade` | `(trade: Dict[str, Any], threshold: float = 10000) -> bool` | Detect whale trades by notional value |
 
-#### RTDS WebSocket Methods (Trade Feeds)
+#### CLOB Market WebSocket Methods (Trade Feeds)
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `connect_websocket` | `() -> bool` | Connect to RTDS WebSocket |
-| `subscribe_to_trades` | `(market_slugs: List[str], callback: Callable) -> None` | Subscribe to trade feeds; empty list subscribes to all |
+| `connect_websocket` | `() -> bool` | Connect to the CLOB market WebSocket |
+| `subscribe_to_trades` | `(token_ids: List[str], callback: Callable) -> None` | Subscribe to trade feeds for explicit CLOB token IDs |
 | `listen_for_trades` | `(max_reconnects: int = 5, message_timeout: float = 30.0, on_error: Optional[Callable] = None, supervisor_retries: int = 3, supervisor_cooldown: float = 60.0) -> None` | Listen with two-tier supervisor resilience |
 
 #### CLOB Order Book WebSocket Methods
@@ -89,8 +89,7 @@ Client for the Polymarket CLOB API, managing both REST requests and WebSocket co
 
 | URL | Protocol | Description |
 |-----|----------|-------------|
-| `wss://ws-live-data.polymarket.com` | RTDS | Live trade activity feed |
-| `wss://ws-subscriptions-clob.polymarket.com/ws/market` | CLOB WS | Real-time order book updates and market resolution |
+| `wss://ws-subscriptions-clob.polymarket.com/ws/market` | CLOB WS | Real-time trade executions, order book updates, price changes, and market resolution |
 
 ## Configuration
 
@@ -113,7 +112,7 @@ The `_request` method implements exponential backoff with retry:
 
 ### WebSocket Resilience
 
-**RTDS Trade Feed -- Two-Tier Supervisor:**
+**CLOB Market Trade Feed -- Two-Tier Supervisor:**
 
 | Tier | Parameter | Default | Description |
 |------|-----------|---------|-------------|
@@ -134,20 +133,21 @@ The `_request` method implements exponential backoff with retry:
 
 ## WebSocket Protocols
 
-### RTDS Trade Feed
+### CLOB Market Trade Feed
 
 **Subscribe message:**
 ```json
 {
-    "action": "subscribe",
-    "subscriptions": [{"topic": "activity", "type": "trades"}]
+    "assets_ids": ["<token_id_1>", "<token_id_2>"],
+    "type": "market",
+    "custom_feature_enabled": true
 }
 ```
 
 **Incoming message types:**
 - `PING` -- respond with `PONG`
-- Trade messages with `topic: "activity"`, `type: "trades"`, containing `payload` with `eventSlug` and `slug` fields
-- Callbacks matched by event slug, market slug, or `_all` key for unfiltered
+- Trade messages with `event_type: "last_trade_price"` containing `asset_id`, `market`, `price`, `size`, and `side`
+- Callbacks are matched by subscribed token ID; legacy RTDS-shaped messages are still parsed for explicit non-default configurations
 
 ### CLOB Order Book WebSocket
 
@@ -175,9 +175,9 @@ Setting `custom_feature_enabled: true` enables `market_resolved` events for real
 ## Data Flow
 
 1. **REST**: Caller invokes a method -> `_request` applies retry/backoff -> returns parsed JSON.
-2. **RTDS trades**: `connect_websocket` -> `subscribe_to_trades` (registers callbacks) -> `listen_for_trades` (supervisor loop dispatches to callbacks by slug match).
+2. **CLOB market trades**: `connect_websocket` -> `subscribe_to_trades` (registers callbacks by token ID) -> `listen_for_trades` (supervisor loop dispatches `last_trade_price` events).
 3. **Order book**: `connect_clob_websocket` -> `subscribe_orderbook` (registers callbacks and token IDs) -> `listen_orderbook` (dispatches `book`/`price_change` to callback, `market_resolved` to resolution callback).
-4. **Fallback path**: When `_ws_permanently_failed` is set, upstream consumers can switch to REST polling where supported. RTDS remains the preferred unauthenticated source for live trade streams.
+4. **Fallback path**: When `_ws_permanently_failed` is set, upstream consumers can switch to REST/Data API polling where supported. Data API `/trades` is the public source for historical trade polling.
 
 ## External Dependencies
 
@@ -190,5 +190,5 @@ Setting `custom_feature_enabled: true` enables `market_resolved` events for real
 
 - **CLI commands**: `orderbook` (live order book display), `chart` (price history), `monitor`, `live_monitor`, `whales`, `arbitrage`, `negrisk`, `crypto15m`, `quicktrade`, `trade`, `fees`, `depth`, `spread`, `volume`, `watch`, `replay`, `sentiment`, `compare`, `mywallet`, `ladder`, `liquidity`, `portfolio`, `export_cmd`, `timing`
 - **TUI screens**: `orderbook_screen.py` (live order book with Rich Live rendering), `analytics.py`, `live_monitor.py`
-- **Core modules**: `core/orderbook.py` (`LiveOrderBook` consumes CLOB WS), `core/whale_tracker.py` (uses RTDS WS + REST fallback), `core/arbitrage.py` (live WS prices), `core/scanner.py`, `core/negrisk.py`, `core/historical.py`, `core/analytics.py`
+- **Core modules**: `core/orderbook.py` (`LiveOrderBook` consumes CLOB WS), `core/whale_tracker.py` (uses CLOB WS + Data API fallback), `core/arbitrage.py` (live WS prices), `core/scanner.py`, `core/negrisk.py`, `core/historical.py`, `core/analytics.py`
 - **Aggregator**: `APIAggregator` uses `CLOBClient` as fallback source and for order book enrichment

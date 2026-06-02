@@ -479,7 +479,7 @@ Configuration stored in `~/.polyterm/config.toml`:
 [api]
 gamma_base_url = "https://gamma-api.polymarket.com"
 clob_rest_endpoint = "https://clob.polymarket.com"
-clob_endpoint = "wss://ws-live-data.polymarket.com"
+clob_endpoint = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
 
 [whale_tracking]
 min_whale_trade = 10000

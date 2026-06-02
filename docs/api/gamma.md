@@ -60,9 +60,9 @@ Client for the Gamma Markets REST API.
 |--------|-----------|-------------|
 | `get_markets` | `(limit: int = 100, offset: int = 0, active: Optional[bool] = None, closed: Optional[bool] = None, tag: Optional[str] = None, market_id: Optional[str] = None) -> List[Dict[str, Any]]` | List markets with filtering via keyset pagination. Defaults to active, non-closed; keeps list-shaped return values for callers |
 | `get_market` | `(market_id: str) -> Dict[str, Any]` | Get single market details by ID or slug |
-| `get_market_prices` | `(market_id: str) -> Dict[str, Any]` | Get current prices and probabilities |
-| `get_market_volume` | `(market_id: str, interval: str = "1h") -> List[Dict[str, Any]]` | Get volume data at specified interval |
-| `get_market_trades` | `(market_id: str, limit: int = 100, before: Optional[int] = None) -> List[Dict[str, Any]]` | Get recent trades for a market |
+| `get_market_prices` | `(market_id: str) -> Dict[str, Any]` | Derive current prices and probabilities from documented market metadata fields |
+| `get_market_volume` | `(market_id: str, interval: str = "1h") -> List[Dict[str, Any]]` | Return volume fields from the market metadata payload |
+| `get_market_trades` | `(market_id: str, limit: int = 100, before: Optional[int] = None) -> List[Dict[str, Any]]` | Get recent trades through the public Data API |
 | `get_market_liquidity` | `(market_id: str) -> Dict[str, Any]` | Get liquidity information |
 | `search_markets` | `(query: str, limit: int = 20) -> List[Dict[str, Any]]` | Search markets by text query with local fallback |
 | `get_trending_markets` | `(limit: int = 10) -> List[Dict[str, Any]]` | Get markets sorted by 24hr volume descending |
@@ -95,12 +95,11 @@ All endpoints are on `https://gamma-api.polymarket.com`:
 |----------|--------|------------|-------------|
 | `/markets/keyset` | GET | `limit`, `next_cursor`, `active`, `closed`, `tag`, `order`, `ascending` | Current market listing endpoint with keyset pagination |
 | `/markets` | GET | `limit`, `offset`, `active`, `closed`, `tag`, `order`, `ascending` | Deprecated legacy fallback only when keyset is unavailable |
-| `/markets/{market_id}` | GET | -- | Single market details |
-| `/markets/{market_id}/prices` | GET | -- | Current prices and probabilities |
-| `/markets/{market_id}/volume` | GET | `interval` | Volume data at interval (1m, 5m, 15m, 1h, 4h, 1d) |
-| `/markets/{market_id}/trades` | GET | `limit`, `before` | Recent trades |
+| `/markets/{market_id}` | GET | -- | Single market details by numeric ID |
+| `/markets/slug/{slug}` | GET | -- | Single market details by slug |
 | `/markets/{market_id}/liquidity` | GET | -- | Liquidity information |
-| `/markets/search` | GET | `q`, `limit` | Text search (may return 422 in some environments; has local fallback) |
+| `/public-search` | GET | `q`, `limit_per_type` | Text search across events/markets/profiles with local fallback |
+| Data API `/trades` | GET | `market`, `limit`, `before` | Public recent trade history |
 
 ## Configuration
 
@@ -133,7 +132,7 @@ The `_request` method implements exponential backoff:
 
 ### Search Endpoint Fallback
 
-`search_markets` tries the `/markets/search` endpoint first. If it receives a 422 or 404 error, it sets `_search_endpoint_supported = False` and falls back to fetching 200 markets via `get_markets` and filtering locally by title substring match.
+`search_markets` tries the documented `/public-search` endpoint first. If it receives a 422 or 404 error, it sets `_search_endpoint_supported = False` and falls back to fetching 200 markets via `get_markets` and filtering locally by title substring match.
 
 ### Resolution Parsing
 

@@ -44,5 +44,5 @@ polyterm {command} --flag value
 
 ## Related Features
 
-- [{Related feature 1}](../path/to/related.md)
-- [{Related feature 2}](../path/to/related.md)
+- Related feature 1
+- Related feature 2

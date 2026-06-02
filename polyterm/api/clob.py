@@ -28,7 +28,7 @@ class CLOBClient:
     def __init__(
         self,
         rest_endpoint: str = "https://clob.polymarket.com",
-        ws_endpoint: str = "wss://ws-live-data.polymarket.com",
+        ws_endpoint: str = "wss://ws-subscriptions-clob.polymarket.com/ws/market",
     ):
         self.rest_endpoint = rest_endpoint.rstrip("/")
         self.ws_endpoint = ws_endpoint
@@ -224,8 +224,10 @@ class CLOBClient:
         """Get recent authenticated CLOB trades.
 
         CLOB V2 documents ``GET /trades`` with query parameters. It requires
-        auth for user trades, so unauthenticated callers should prefer RTDS
-        WebSocket data; this method is retained for REST fallback compatibility.
+        auth for user trades, so unauthenticated callers should prefer the
+        public Data API for historical trades or the CLOB market WebSocket for
+        live trade events. This method is retained for authenticated
+        compatibility.
         """
         url = f"{self.rest_endpoint}/trades"
         params: Dict[str, Any] = {"limit": limit}
@@ -282,48 +284,38 @@ class CLOBClient:
     # WebSocket Methods for Live Trading Data
     
     async def connect_websocket(self):
-        """Connect to PolyMarket RTDS WebSocket"""
+        """Connect to the public CLOB market WebSocket."""
         if not HAS_WEBSOCKETS:
             raise Exception("websockets library not installed. Install with: pip install websockets")
         
         try:
-            # Connect to RTDS endpoint (no path needed)
             self.ws_connection = await websockets.connect(self.ws_endpoint)
             return True
         except Exception as e:
             raise Exception(f"Failed to connect to WebSocket: {e}")
     
-    async def subscribe_to_trades(self, market_slugs: List[str], callback: Callable):
-        """Subscribe to live trade feeds for multiple markets using RTDS
+    async def subscribe_to_trades(self, token_ids: List[str], callback: Callable):
+        """Subscribe to live trade executions for CLOB token IDs.
 
         Args:
-            market_slugs: List of market slugs to monitor (can be empty to subscribe to all)
+            token_ids: CLOB asset/token IDs to monitor.
             callback: Function to call when trade data is received
         """
+        if not token_ids:
+            raise ValueError("CLOB market websocket subscriptions require token IDs")
+
         if not self.ws_connection:
             await self.connect_websocket()
 
-        # Subscribe to ALL trades (no filter) - we'll filter client-side
-        # This is more reliable than per-market subscriptions which may miss data
         subscribe_msg = {
-            "action": "subscribe",
-            "subscriptions": [
-                {
-                    "topic": "activity",
-                    "type": "trades"
-                }
-            ]
+            "assets_ids": [str(token_id) for token_id in token_ids],
+            "type": "market",
+            "custom_feature_enabled": True,
         }
         await self.ws_connection.send(json.dumps(subscribe_msg))
 
-        # Store callback for all markets (keyed by slug)
-        # Also store a special "_all" key for unfiltered callbacks
-        for market_slug in market_slugs:
-            self.subscriptions[market_slug] = callback
-
-        # If no specific markets, store callback for all trades
-        if not market_slugs:
-            self.subscriptions["_all"] = callback
+        for token_id in token_ids:
+            self.subscriptions[str(token_id)] = callback
     
     async def listen_for_trades(
         self,
@@ -333,7 +325,7 @@ class CLOBClient:
         supervisor_retries: int = 3,
         supervisor_cooldown: float = 60.0,
     ):
-        """Listen for incoming trade messages from RTDS with auto-reconnection.
+        """Listen for incoming CLOB market trade messages with auto-reconnection.
 
         Features a two-tier resilience model:
         - Inner loop: reconnects up to max_reconnects on connection drops
@@ -354,13 +346,13 @@ class CLOBClient:
                 await self._listen_for_trades_inner(max_reconnects, message_timeout)
                 # Inner loop exited cleanly (max_reconnects exhausted)
             except Exception as exc:
-                logger.error("RTDS listen_for_trades inner loop error: %s", exc)
+                logger.error("CLOB market listen_for_trades inner loop error: %s", exc)
 
             # Check if supervisor should restart
             supervisor_attempts += 1
             if supervisor_attempts > supervisor_retries:
                 logger.error(
-                    "RTDS supervisor exhausted after %d retries, giving up",
+                    "CLOB market websocket supervisor exhausted after %d retries, giving up",
                     supervisor_retries,
                 )
                 self.subscriptions.clear()
@@ -368,14 +360,14 @@ class CLOBClient:
                 if on_error:
                     try:
                         on_error(Exception(
-                            f"WebSocket permanently failed after {supervisor_retries} supervisor retries"
+                            f"CLOB market websocket permanently failed after {supervisor_retries} supervisor retries"
                         ))
                     except Exception:
                         pass
                 return
 
             logger.error(
-                "RTDS reconnects exhausted, supervisor restarting in %.0fs (attempt %d/%d)",
+                "CLOB market websocket reconnects exhausted, supervisor restarting in %.0fs (attempt %d/%d)",
                 supervisor_cooldown,
                 supervisor_attempts,
                 supervisor_retries,
@@ -383,7 +375,7 @@ class CLOBClient:
             if on_error:
                 try:
                     on_error(Exception(
-                        f"WebSocket reconnects exhausted, supervisor restart {supervisor_attempts}/{supervisor_retries}"
+                        f"CLOB market websocket reconnects exhausted, supervisor restart {supervisor_attempts}/{supervisor_retries}"
                     ))
                 except Exception:
                     pass
@@ -394,7 +386,7 @@ class CLOBClient:
             self.ws_connection = None
 
     async def _listen_for_trades_inner(self, max_reconnects: int, message_timeout: float):
-        """Inner reconnect loop for RTDS trade listening."""
+        """Inner reconnect loop for CLOB market trade listening."""
         reconnect_attempts = 0
 
         while reconnect_attempts <= max_reconnects:
@@ -407,8 +399,9 @@ class CLOBClient:
                         # Re-subscribe after reconnecting
                         if self.subscriptions:
                             subscribe_msg = {
-                                "action": "subscribe",
-                                "subscriptions": [{"topic": "activity", "type": "trades"}]
+                                "assets_ids": list(self.subscriptions.keys()),
+                                "type": "market",
+                                "custom_feature_enabled": True,
                             }
                             await self.ws_connection.send(json.dumps(subscribe_msg))
                     except Exception:
@@ -426,7 +419,7 @@ class CLOBClient:
                         )
                     except asyncio.TimeoutError:
                         logger.warning(
-                            "RTDS message timeout (%.0fs), forcing reconnect",
+                            "CLOB market websocket message timeout (%.0fs), forcing reconnect",
                             message_timeout,
                         )
                         # Force close stale connection
@@ -451,29 +444,42 @@ class CLOBClient:
                         if not message or message.strip() == "":
                             continue
 
-                        data = json.loads(message)
+                        raw_data = json.loads(message)
+                        messages = raw_data if isinstance(raw_data, list) else [raw_data]
 
-                        # Only process messages with payload (actual trade data)
-                        if "payload" not in data:
-                            continue
+                        for data in messages:
+                            if not isinstance(data, dict):
+                                continue
 
-                        # Handle RTDS trade messages
-                        if data.get("topic") == "activity" and data.get("type") == "trades":
-                            payload = data.get("payload", {})
+                            msg_type = data.get("event_type", data.get("type", ""))
+                            if msg_type == "last_trade_price":
+                                payload = self._normalize_clob_trade_payload(data)
+                                asset_id = payload.get("asset_id", "")
+                                market_id = payload.get("market", "")
 
-                            event_slug = payload.get("eventSlug", "")
-                            market_slug = payload.get("slug", "")
-
-                            callback = None
-                            if event_slug and event_slug in self.subscriptions:
-                                callback = self.subscriptions[event_slug]
-                            elif market_slug and market_slug in self.subscriptions:
-                                callback = self.subscriptions[market_slug]
-                            elif "_all" in self.subscriptions:
-                                callback = self.subscriptions["_all"]
+                                callback = self.subscriptions.get(asset_id) or self.subscriptions.get(market_id)
+                            elif data.get("topic") == "activity" and data.get("type") == "trades":
+                                payload = data.get("payload", {})
+                                event_slug = payload.get("eventSlug", "")
+                                market_slug = payload.get("slug", "")
+                                callback = (
+                                    self.subscriptions.get(event_slug)
+                                    or self.subscriptions.get(market_slug)
+                                    or self.subscriptions.get("_all")
+                                )
+                            else:
+                                callback = None
 
                             if callback:
-                                result = callback(data)
+                                if msg_type == "last_trade_price":
+                                    callback_data = {
+                                        "topic": "clob_market",
+                                        "type": "last_trade_price",
+                                        "payload": payload,
+                                    }
+                                else:
+                                    callback_data = data
+                                result = callback(callback_data)
                                 # Support both sync and async callbacks
                                 if hasattr(result, '__await__'):
                                     await result
@@ -495,6 +501,24 @@ class CLOBClient:
                 if reconnect_attempts <= max_reconnects:
                     continue
                 break
+
+    @staticmethod
+    def _normalize_clob_trade_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+        """Map CLOB market websocket trade events to the legacy callback shape."""
+        asset_id = str(data.get("asset_id", ""))
+        market_id = str(data.get("market", ""))
+        return {
+            "asset_id": asset_id,
+            "market": market_id,
+            "eventSlug": market_id,
+            "slug": asset_id,
+            "price": data.get("price", 0),
+            "size": data.get("size", 0),
+            "side": str(data.get("side", "")).upper(),
+            "outcome": data.get("outcome", ""),
+            "fee_rate_bps": data.get("fee_rate_bps"),
+            "timestamp": data.get("timestamp"),
+        }
     
     async def close_websocket(self):
         """Close any active WebSocket connections."""
@@ -638,20 +662,25 @@ class CLOBClient:
                         if not message or message.strip() == "":
                             continue
 
-                        data = json.loads(message)
+                        raw_data = json.loads(message)
+                        messages = raw_data if isinstance(raw_data, list) else [raw_data]
 
-                        # Handle different message types
-                        msg_type = data.get("type", data.get("event_type", ""))
-                        if msg_type == "market_resolved":
-                            if hasattr(self, '_ob_resolution_callback') and self._ob_resolution_callback:
-                                result = self._ob_resolution_callback(data)
-                                if hasattr(result, '__await__'):
-                                    await result
-                        elif msg_type in ("book", "last_trade_price", "price_change", "tick_size_change"):
-                            if hasattr(self, '_ob_callback') and self._ob_callback:
-                                result = self._ob_callback(data)
-                                if hasattr(result, '__await__'):
-                                    await result
+                        for data in messages:
+                            if not isinstance(data, dict):
+                                continue
+
+                            # Handle different message types
+                            msg_type = data.get("type", data.get("event_type", ""))
+                            if msg_type == "market_resolved":
+                                if hasattr(self, '_ob_resolution_callback') and self._ob_resolution_callback:
+                                    result = self._ob_resolution_callback(data)
+                                    if hasattr(result, '__await__'):
+                                        await result
+                            elif msg_type in ("book", "last_trade_price", "price_change", "tick_size_change"):
+                                if hasattr(self, '_ob_callback') and self._ob_callback:
+                                    result = self._ob_callback(data)
+                                    if hasattr(result, '__await__'):
+                                        await result
                     except json.JSONDecodeError:
                         continue
                     except Exception:
@@ -747,7 +776,13 @@ class CLOBClient:
             True if market is current
         """
         try:
-            # Check if closed
+            is_active = market.get("active")
+            is_closed = market.get("closed")
+            if is_active is not None and is_closed is not None:
+                if market.get("accepting_orders") is False:
+                    return False
+                return bool(is_active) and not bool(is_closed)
+
             if market.get('closed', False):
                 return False
             

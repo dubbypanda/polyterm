@@ -808,7 +808,7 @@ class TestCLOBClientInit:
         """Test default endpoint values"""
         client = CLOBClient()
         assert client.rest_endpoint == "https://clob.polymarket.com"
-        assert client.ws_endpoint == "wss://ws-live-data.polymarket.com"
+        assert client.ws_endpoint == "wss://ws-subscriptions-clob.polymarket.com/ws/market"
 
     def test_custom_endpoints(self):
         """Test custom endpoint values"""
@@ -1176,7 +1176,7 @@ class TestCLOBWebSocketOrderBook:
 
     @pytest.mark.asyncio
     async def test_close_websocket_closes_rtds_and_orderbook_connections(self, client):
-        """close_websocket should close both RTDS and orderbook sockets."""
+        """close_websocket should close both trade and orderbook sockets."""
         rtds_ws = AsyncMock()
         orderbook_ws = AsyncMock()
         client.ws_connection = rtds_ws

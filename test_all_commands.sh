@@ -1,67 +1,56 @@
 #!/bin/bash
-# Comprehensive test script for all PolyTerm commands
+# Portable command smoke test for the current PolyTerm checkout.
 
-set -e
+set -euo pipefail
 
-echo "PolyTerm - Command Test Suite"
-echo "=============================="
-echo ""
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PYTHON="${POLYTERM_PYTHON:-$ROOT_DIR/.venv/bin/python}"
 
-# Activate virtual environment if it exists
-if [ -d "venv" ]; then
-    source venv/bin/activate
+if [ ! -x "$PYTHON" ]; then
+    PYTHON="$(command -v python3)"
 fi
 
-# Test 1: Config
-echo "Test 1: Config Commands"
-echo "------------------------"
-polyterm config --list | head -10
-echo "✅ Config list works"
+cd "$ROOT_DIR"
 
-polyterm config --get api.gamma_base_url
-echo "✅ Config get works"
+echo "PolyTerm command smoke suite"
+echo "============================"
+echo "Python: $PYTHON"
 echo ""
 
-# Test 2: Monitor
-echo "Test 2: Monitor Command"
-echo "-----------------------"
-timeout 5 polyterm monitor --limit 5 || echo "✅ Monitor works (interrupted)"
+"$PYTHON" - <<'PY'
+import subprocess
+import sys
+
+from polyterm.cli.lazy_group import LAZY_COMMANDS
+
+base = [sys.executable, "-m", "polyterm"]
+failures = []
+
+for command in sorted(LAZY_COMMANDS):
+    result = subprocess.run(
+        base + [command, "--help"],
+        text=True,
+        capture_output=True,
+        timeout=15,
+    )
+    if result.returncode != 0:
+        failures.append((command, result.stderr or result.stdout))
+
+if failures:
+    for command, output in failures:
+        print(f"[FAIL] {command} --help")
+        print(output)
+    raise SystemExit(1)
+
+print(f"[OK] {len(LAZY_COMMANDS)} registered commands expose help")
+PY
+
+"$PYTHON" -m polyterm --version
+"$PYTHON" -m polyterm config --get api.gamma_base_url
+"$PYTHON" -m polyterm fees --amount 100 --price 0.65 --format json >/tmp/polyterm-fees-smoke.json
+"$PYTHON" -m polyterm search "bitcoin" --limit 2 --format json >/tmp/polyterm-search-smoke.json
+
+rm -f /tmp/polyterm-fees-smoke.json /tmp/polyterm-search-smoke.json
+
 echo ""
-
-# Test 3: Whales
-echo "Test 3: Whales Command"
-echo "----------------------"
-polyterm whales --hours 24 --min-amount 50000
-echo "✅ Whales command works"
-echo ""
-
-# Test 4: Portfolio
-echo "Test 4: Portfolio Command"
-echo "-------------------------"
-polyterm portfolio --wallet 0x1234567890123456789012345678901234567890
-echo "✅ Portfolio command works (shows expected error)"
-echo ""
-
-# Test 5: Export
-echo "Test 5: Export Command"
-echo "----------------------"
-# Get a market ID first
-MARKET_ID=$(python3 << 'EOF'
-from polyterm.api.gamma import GammaClient
-gamma = GammaClient()
-markets = gamma.get_markets(limit=1)
-print(markets[0]['id'])
-EOF
-)
-
-polyterm export --market "$MARKET_ID" --format json -o /tmp/test_export.json
-if [ -f "/tmp/test_export.json" ]; then
-    echo "✅ Export to JSON works"
-    rm /tmp/test_export.json
-fi
-echo ""
-
-echo "=============================="
-echo "All Tests Complete!"
-echo "=============================="
-
+echo "All command smoke checks passed."

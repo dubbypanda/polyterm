@@ -5,6 +5,7 @@ import logging
 
 from .gamma import GammaClient
 from .clob import CLOBClient
+from .market_utils import get_primary_clob_token_id
 
 logger = logging.getLogger(__name__)
 
@@ -105,9 +106,11 @@ class APIAggregator:
             except Exception:
                 pass
         
-        # Try to add order book data from CLOB
+        # Try to add order book data from CLOB. CLOB requires token IDs, not
+        # Gamma market IDs.
         try:
-            order_book = self.clob_client.get_order_book(market_id)
+            token_id = get_primary_clob_token_id(enriched) or market_id
+            order_book = self.clob_client.get_order_book(token_id)
             if order_book:
                 enriched['order_book'] = order_book
                 enriched['spread'] = self.clob_client.calculate_spread(order_book)

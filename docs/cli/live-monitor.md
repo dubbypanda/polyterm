@@ -4,7 +4,7 @@
 
 ## Overview
 
-Launch dedicated live market monitor in a new terminal window. The monitor uses a fixed Rich Live dashboard so the header, connection state, counters, volume, buy/sell totals, last trade time, recent trades table, and status footer stay visible while RTDS trades stream in.
+Launch dedicated live market monitor in a new terminal window. The monitor uses a fixed Rich Live dashboard so the header, connection state, counters, volume, buy/sell totals, last trade time, recent trades table, and status footer stay visible while CLOB market trade events stream in.
 
 ## Usage
 
@@ -25,7 +25,7 @@ In the TUI main menu, use any of these shortcuts: `2`, `l`
 |------|------|---------|-------------|
 | `--market` | string | `none` | Market ID or slug to monitor |
 | `--category` | string | `none` | Category to monitor (crypto, politics, sports, etc.) |
-| `--interactive` | flag | `false` | Interactive market/category selection |
+| `--interactive`, `-i` | flag | `false` | Interactive market/category selection |
 
 ## Examples
 
@@ -41,7 +41,7 @@ polyterm live-monitor --interactive
 
 - Gamma Markets REST API
 - CLOB REST API
-- RTDS WebSocket real-time trade feed
+- CLOB market WebSocket real-time trade feed
 - User configuration (`~/.polyterm/config.toml`)
 
 

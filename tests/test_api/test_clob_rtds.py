@@ -1,4 +1,4 @@
-"""Tests for CLOB RTDS WebSocket functionality"""
+"""Tests for CLOB market trade WebSocket functionality"""
 
 import asyncio
 import json
@@ -8,19 +8,19 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch, PropertyMock
 from polyterm.api.clob import CLOBClient
 
 
-class TestCLOBRTDSConnection:
-    """Tests for RTDS WebSocket connection lifecycle"""
+class TestCLOBMarketWSConnection:
+    """Tests for CLOB market WebSocket connection lifecycle"""
 
     @pytest.fixture
     def client(self):
         return CLOBClient(
             rest_endpoint="https://clob.polymarket.com",
-            ws_endpoint="wss://ws-live-data.polymarket.com",
+            ws_endpoint="wss://ws-subscriptions-clob.polymarket.com/ws/market",
         )
 
     @pytest.mark.asyncio
     async def test_connect_websocket_success(self, client):
-        """connect_websocket establishes RTDS connection"""
+        """connect_websocket establishes CLOB market connection"""
         mock_ws = AsyncMock()
         with patch("polyterm.api.clob.websockets") as mock_websockets:
             mock_websockets.connect = AsyncMock(return_value=mock_ws)
@@ -45,8 +45,8 @@ class TestCLOBRTDSConnection:
                 await client.connect_websocket()
 
 
-class TestCLOBRTDSSubscription:
-    """Tests for RTDS trade subscription"""
+class TestCLOBMarketWSSubscription:
+    """Tests for CLOB market trade subscription"""
 
     @pytest.fixture
     def client(self):
@@ -56,30 +56,30 @@ class TestCLOBRTDSSubscription:
 
     @pytest.mark.asyncio
     async def test_subscribe_sends_correct_message(self, client):
-        """subscribe_to_trades sends activity/trades subscription"""
+        """subscribe_to_trades sends CLOB market subscription"""
         callback = Mock()
-        await client.subscribe_to_trades(["btc-100k", "eth-5k"], callback)
+        await client.subscribe_to_trades(["token-a", "token-b"], callback)
 
         sent = json.loads(client.ws_connection.send.call_args[0][0])
-        assert sent["action"] == "subscribe"
-        assert sent["subscriptions"] == [{"topic": "activity", "type": "trades"}]
+        assert sent["type"] == "market"
+        assert sent["assets_ids"] == ["token-a", "token-b"]
+        assert sent["custom_feature_enabled"] is True
 
     @pytest.mark.asyncio
     async def test_subscribe_stores_callbacks_by_slug(self, client):
         """subscribe_to_trades stores callbacks keyed by slug"""
         callback = Mock()
-        await client.subscribe_to_trades(["btc-100k", "eth-5k"], callback)
+        await client.subscribe_to_trades(["token-a", "token-b"], callback)
 
-        assert client.subscriptions["btc-100k"] is callback
-        assert client.subscriptions["eth-5k"] is callback
+        assert client.subscriptions["token-a"] is callback
+        assert client.subscriptions["token-b"] is callback
 
     @pytest.mark.asyncio
-    async def test_subscribe_empty_slugs_stores_all_key(self, client):
-        """subscribe_to_trades with no slugs registers _all callback"""
+    async def test_subscribe_empty_tokens_raises(self, client):
+        """subscribe_to_trades requires documented token IDs."""
         callback = Mock()
-        await client.subscribe_to_trades([], callback)
-        assert "_all" in client.subscriptions
-        assert client.subscriptions["_all"] is callback
+        with pytest.raises(ValueError, match="require token IDs"):
+            await client.subscribe_to_trades([], callback)
 
     @pytest.mark.asyncio
     async def test_subscribe_auto_connects_if_no_connection(self):
@@ -90,12 +90,12 @@ class TestCLOBRTDSSubscription:
         mock_ws = AsyncMock()
         with patch("polyterm.api.clob.websockets") as mock_websockets:
             mock_websockets.connect = AsyncMock(return_value=mock_ws)
-            await client.subscribe_to_trades(["slug1"], Mock())
+            await client.subscribe_to_trades(["token1"], Mock())
 
         assert client.ws_connection is mock_ws
 
 
-class TestCLOBRTDSListenForTrades:
+class TestCLOBMarketWSListenForTrades:
     """Tests for listen_for_trades message handling"""
 
     @pytest.fixture
@@ -270,6 +270,37 @@ class TestCLOBRTDSListenForTrades:
         assert len(calls) == 1
 
     @pytest.mark.asyncio
+    async def test_clob_trade_batch_dispatches_to_callback(self, client):
+        """CLOB market websocket batches are parsed item by item."""
+        import websockets.exceptions
+        callback = Mock(return_value=None)
+        trade_msg = json.dumps([
+            {
+                "event_type": "last_trade_price",
+                "asset_id": "token-a",
+                "market": "condition-a",
+                "price": "0.65",
+                "size": "100",
+                "side": "BUY",
+            }
+        ])
+
+        mock_ws = AsyncMock()
+        mock_ws.recv = AsyncMock(side_effect=[
+            trade_msg,
+            websockets.exceptions.ConnectionClosed(None, None),
+        ])
+        client.ws_connection = mock_ws
+        client.subscriptions = {"token-a": callback}
+
+        await client.listen_for_trades(max_reconnects=0, supervisor_retries=0)
+
+        callback.assert_called_once()
+        call_data = callback.call_args[0][0]
+        assert call_data["topic"] == "clob_market"
+        assert call_data["payload"]["asset_id"] == "token-a"
+
+    @pytest.mark.asyncio
     async def test_reconnect_attempts_reset_on_successful_message(self, client):
         """Reconnect counter resets to 0 on each successful message"""
         import websockets.exceptions
@@ -288,8 +319,8 @@ class TestCLOBRTDSListenForTrades:
         callback.assert_called_once()
 
 
-class TestCLOBRTDSReconnection:
-    """Tests for RTDS reconnection with exponential backoff"""
+class TestCLOBMarketWSReconnection:
+    """Tests for CLOB market reconnection with exponential backoff"""
 
     @pytest.fixture
     def client(self):
@@ -394,7 +425,8 @@ class TestCLOBRTDSReconnection:
 
         # Verify re-subscription was sent
         assert any(
-            m.get("action") == "subscribe" for m in sent_messages
+            m.get("type") == "market" and m.get("assets_ids") == ["btc-100k"]
+            for m in sent_messages
         ), "Should re-subscribe after reconnect"
 
     @pytest.mark.asyncio
@@ -419,7 +451,7 @@ class TestCLOBRTDSReconnection:
         assert len(client.subscriptions) == 0
 
 
-class TestCLOBRTDSMessageTimeout:
+class TestCLOBMarketWSMessageTimeout:
     """Tests for message timeout forcing reconnect"""
 
     @pytest.fixture
@@ -522,7 +554,7 @@ class TestCLOBRTDSMessageTimeout:
         callback.assert_called_once()
 
 
-class TestCLOBRTDSSupervisor:
+class TestCLOBMarketWSSupervisor:
     """Tests for supervisor retry loop"""
 
     @pytest.fixture
@@ -620,7 +652,7 @@ class TestCLOBRTDSSupervisor:
         assert client._ws_permanently_failed is True
 
 
-class TestCLOBRTDSOnError:
+class TestCLOBMarketWSOnError:
     """Tests for on_error callback"""
 
     @pytest.fixture
@@ -896,12 +928,12 @@ class TestCLOBOrderbookWSTimeout:
         ), "Should re-subscribe with token IDs after reconnect"
 
 
-class TestCLOBRTDSCloseWebSocket:
+class TestCLOBMarketWSCloseWebSocket:
     """Tests for WebSocket cleanup"""
 
     @pytest.mark.asyncio
     async def test_close_websocket_closes_rtds(self):
-        """close_websocket closes RTDS connection"""
+        """close_websocket closes trade connection"""
         client = CLOBClient()
         mock_ws = AsyncMock()
         client.ws_connection = mock_ws
@@ -949,7 +981,7 @@ class TestCLOBCloseWebSocketDualCleanup:
 
     @pytest.mark.asyncio
     async def test_close_websocket_closes_both_connections(self):
-        """close_websocket closes both RTDS and CLOB WS when both are active"""
+        """close_websocket closes both trade and orderbook sockets when both are active"""
         client = CLOBClient()
         mock_rtds = AsyncMock()
         mock_clob = AsyncMock()
@@ -981,7 +1013,7 @@ class TestCLOBCloseWebSocketDualCleanup:
 
     @pytest.mark.asyncio
     async def test_close_websocket_rtds_error_still_closes_clob(self):
-        """If RTDS close() throws, CLOB WS is still closed"""
+        """If trade close() throws, CLOB WS is still closed"""
         client = CLOBClient()
         mock_rtds = AsyncMock()
         mock_rtds.close = AsyncMock(side_effect=Exception("rtds close error"))
@@ -1236,8 +1268,8 @@ class TestCLOBSubscribeEdgeCases:
         assert client.subscriptions["slug-a"] is cb2
 
 
-class TestCLOBRTDSInnerReconnect:
-    """Tests for RTDS inner loop reconnect edge cases"""
+class TestCLOBMarketWSInnerReconnect:
+    """Tests for CLOB market inner loop reconnect edge cases"""
 
     @pytest.fixture
     def client(self):
@@ -1285,7 +1317,8 @@ class TestCLOBRTDSInnerReconnect:
             with patch("asyncio.sleep", new_callable=AsyncMock):
                 await client._listen_for_trades_inner(max_reconnects=1, message_timeout=5.0)
 
-        # Should have re-subscribed with activity/trades
+        # Should have re-subscribed with CLOB market assets
         assert any(
-            m.get("action") == "subscribe" for m in sent_messages
+            m.get("type") == "market" and m.get("assets_ids") == ["slug-a"]
+            for m in sent_messages
         ), "Should re-subscribe after reconnect"

@@ -24,7 +24,7 @@ A three-step setup flow:
 
 For category mode, the screen verifies that markets exist for the selected category before launching.
 
-The launched monitor keeps its header, connection state, trade counters, buy/sell totals, last trade time, recent trades table, and status footer visible while RTDS messages arrive.
+The launched monitor keeps its header, connection state, trade counters, buy/sell totals, last trade time, recent trades table, and status footer visible while CLOB market websocket messages arrive.
 
 ## Navigation / Keyboard Shortcuts
 
@@ -43,7 +43,7 @@ The screen constructs and runs the `LiveMarketMonitor` class directly, either in
 ## Data Sources
 
 - Gamma REST API (market search, category verification)
-- RTDS WebSocket (`wss://ws-live-data.polymarket.com`) for real-time price updates
+- CLOB market WebSocket (`wss://ws-subscriptions-clob.polymarket.com/ws/market`) for real-time trade and price updates
 - Polling fallback when WebSocket is unavailable
 
 ## Related Screens

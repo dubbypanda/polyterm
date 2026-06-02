@@ -571,14 +571,16 @@ class TestGammaSearchMarkets:
 
     @responses.activate
     def test_search_markets_search_endpoint_success(self, client):
-        """Test that search_markets uses search endpoint first"""
+        """Test that search_markets uses public search endpoint first"""
         responses.add(
             responses.GET,
-            f"{GAMMA_ENDPOINT}/markets/search",
-            json=[
-                {"id": "1", "question": "Bitcoin price prediction"},
-                {"id": "2", "question": "Ethereum price prediction"},
-            ],
+            f"{GAMMA_ENDPOINT}/public-search",
+            json={
+                "markets": [
+                    {"id": "1", "question": "Bitcoin price prediction"},
+                    {"id": "2", "question": "Ethereum price prediction"},
+                ]
+            },
             status=200,
         )
 
@@ -587,7 +589,7 @@ class TestGammaSearchMarkets:
         assert "Bitcoin" in results[0]["question"]
         # Verify search params
         assert "q=bitcoin" in responses.calls[0].request.url
-        assert "limit=5" in responses.calls[0].request.url
+        assert "limit_per_type=5" in responses.calls[0].request.url
 
     @responses.activate
     def test_search_markets_fallback_to_local_filter(self, client):
@@ -595,12 +597,12 @@ class TestGammaSearchMarkets:
         # Search endpoint fails
         responses.add(
             responses.GET,
-            f"{GAMMA_ENDPOINT}/markets/search",
+            f"{GAMMA_ENDPOINT}/public-search",
             status=500,
         )
         # Also add the 500 retry responses (retries=3 means up to 3 attempts)
-        responses.add(responses.GET, f"{GAMMA_ENDPOINT}/markets/search", status=500)
-        responses.add(responses.GET, f"{GAMMA_ENDPOINT}/markets/search", status=500)
+        responses.add(responses.GET, f"{GAMMA_ENDPOINT}/public-search", status=500)
+        responses.add(responses.GET, f"{GAMMA_ENDPOINT}/public-search", status=500)
         # Fallback: get_markets returns list
         responses.add(
             responses.GET,
@@ -626,9 +628,9 @@ class TestGammaSearchMarkets:
     def test_search_markets_fallback_respects_limit(self, client):
         """Test that fallback local filter respects limit parameter"""
         # Search endpoint fails
-        responses.add(responses.GET, f"{GAMMA_ENDPOINT}/markets/search", status=500)
-        responses.add(responses.GET, f"{GAMMA_ENDPOINT}/markets/search", status=500)
-        responses.add(responses.GET, f"{GAMMA_ENDPOINT}/markets/search", status=500)
+        responses.add(responses.GET, f"{GAMMA_ENDPOINT}/public-search", status=500)
+        responses.add(responses.GET, f"{GAMMA_ENDPOINT}/public-search", status=500)
+        responses.add(responses.GET, f"{GAMMA_ENDPOINT}/public-search", status=500)
         # Fallback returns many bitcoin markets
         markets = [{"id": str(i), "question": f"Bitcoin market {i}"} for i in range(10)]
         responses.add(responses.GET, f"{GAMMA_ENDPOINT}/markets/keyset", json={"markets": markets}, status=200)
@@ -644,8 +646,8 @@ class TestGammaSearchMarkets:
         # Search endpoint returns empty list (falsy)
         responses.add(
             responses.GET,
-            f"{GAMMA_ENDPOINT}/markets/search",
-            json=[],
+            f"{GAMMA_ENDPOINT}/public-search",
+            json={"markets": []},
             status=200,
         )
         # Fallback
@@ -665,7 +667,7 @@ class TestGammaSearchMarkets:
         """Test that search endpoint is disabled after a 422 response."""
         responses.add(
             responses.GET,
-            f"{GAMMA_ENDPOINT}/markets/search",
+            f"{GAMMA_ENDPOINT}/public-search",
             status=422,
             json={"error": "unprocessable"},
         )
@@ -688,16 +690,16 @@ class TestGammaSearchMarkets:
         assert len(first) == 1
         assert len(second) == 1
         assert len(responses.calls) == 3
-        assert "/markets/search" in responses.calls[0].request.url
+        assert "/public-search" in responses.calls[0].request.url
         assert "/markets/keyset?" in responses.calls[1].request.url
         assert "/markets/keyset?" in responses.calls[2].request.url
 
     @responses.activate
     def test_search_markets_keeps_search_endpoint_after_transient_500(self, client):
         """Transient 5xx errors should not permanently disable search endpoint."""
-        responses.add(responses.GET, f"{GAMMA_ENDPOINT}/markets/search", status=500)
-        responses.add(responses.GET, f"{GAMMA_ENDPOINT}/markets/search", status=500)
-        responses.add(responses.GET, f"{GAMMA_ENDPOINT}/markets/search", status=500)
+        responses.add(responses.GET, f"{GAMMA_ENDPOINT}/public-search", status=500)
+        responses.add(responses.GET, f"{GAMMA_ENDPOINT}/public-search", status=500)
+        responses.add(responses.GET, f"{GAMMA_ENDPOINT}/public-search", status=500)
         responses.add(
             responses.GET,
             f"{GAMMA_ENDPOINT}/markets/keyset",
@@ -706,8 +708,8 @@ class TestGammaSearchMarkets:
         )
         responses.add(
             responses.GET,
-            f"{GAMMA_ENDPOINT}/markets/search",
-            json=[{"id": "2", "question": "Bitcoin endpoint recovered"}],
+            f"{GAMMA_ENDPOINT}/public-search",
+            json={"markets": [{"id": "2", "question": "Bitcoin endpoint recovered"}]},
             status=200,
         )
 
@@ -722,7 +724,7 @@ class TestGammaSearchMarkets:
         assert client._search_endpoint_supported is True
         assert len(responses.calls) == 5
         assert "/markets/keyset?" in responses.calls[3].request.url
-        assert "/markets/search" in responses.calls[4].request.url
+        assert "/public-search" in responses.calls[4].request.url
 
 
 class TestGammaGetTrendingMarkets:

@@ -9,7 +9,7 @@ Display price history chart for a market. Shows ASCII chart of price movement ov
 Examples:
 polyterm chart --market "bitcoin"
 polyterm chart -m "election" --hours 48
-polyterm chart -m "bitcoin" --sparkline.
+polyterm chart -m "bitcoin" --sparkline
 
 ## Usage
 

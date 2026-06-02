@@ -69,14 +69,18 @@ class DataAPIClient:
         response.raise_for_status()
         return response.json()
 
-    def get_trades(self, address, limit=100, market=None):
+    def get_trades(self, address=None, limit=100, market=None, before=None):
         """Get wallet trades
         GET /trades?user={address}&limit={limit}&market={market}
         Returns list of trade dicts
         """
-        params = {"user": address, "limit": limit}
+        params = {"limit": limit}
+        if address:
+            params["user"] = address
         if market:
             params["market"] = market
+        if before:
+            params["before"] = before
         response = self._request("GET", "/trades", params=params)
         response.raise_for_status()
         return response.json()

@@ -10,6 +10,7 @@ from ..api.gamma import GammaClient
 from ..api.clob import CLOBClient
 from ..utils.json_output import safe_float
 from ..api.aggregator import APIAggregator
+from ..api.market_utils import get_primary_clob_token_id, market_probability_price
 
 
 class MarketSnapshot:
@@ -96,21 +97,24 @@ class MarketScanner:
             # Fetch from multiple sources
             gamma_data = self.gamma_client.get_market(market_id)
             gamma_prices = self.gamma_client.get_market_prices(market_id)
+            token_id = get_primary_clob_token_id(gamma_data)
             
             # Get CLOB data
             try:
-                clob_ticker = self.clob_client.get_ticker(market_id)
-                clob_book = self.clob_client.get_order_book(market_id)
+                clob_ticker = self.clob_client.get_ticker(token_id) if token_id else {}
+                clob_book = self.clob_client.get_order_book(token_id) if token_id else {}
             except Exception:
                 clob_ticker = {}
                 clob_book = {}
+
+            price = safe_float(gamma_prices.get("price", market_probability_price(gamma_data)))
 
             # Aggregate data
             aggregated_data = {
                 "market_id": market_id,
                 "title": gamma_data.get("question", ""),
-                "probability": safe_float(gamma_prices.get("price", 0)) * 100,
-                "price": safe_float(gamma_prices.get("price", 0)),
+                "probability": price * 100,
+                "price": price,
                 "volume": safe_float(gamma_data.get("volume", 0)),
                 "liquidity": safe_float(gamma_data.get("liquidity", 0)),
                 "last_trade_price": safe_float(clob_ticker.get("last", 0)) if clob_ticker else 0,

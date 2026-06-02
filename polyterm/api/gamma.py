@@ -8,6 +8,13 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 
+from .market_utils import (
+    get_market_condition_id,
+    looks_like_slug,
+    market_probability_price,
+    parse_list_field,
+)
+
 try:
     from dateutil import parser
     HAS_DATEUTIL = True
@@ -325,10 +332,12 @@ class GammaClient:
         Returns:
             Market dictionary with full details
         """
+        if looks_like_slug(str(market_id)):
+            return self._request("GET", f"/markets/slug/{market_id}")
         return self._request("GET", f"/markets/{market_id}")
     
     def get_market_prices(self, market_id: str) -> Dict[str, Any]:
-        """Get current prices for a market
+        """Get current prices for a market from documented metadata fields.
         
         Args:
             market_id: Market ID
@@ -336,7 +345,17 @@ class GammaClient:
         Returns:
             Dictionary with current prices and probabilities
         """
-        return self._request("GET", f"/markets/{market_id}/prices")
+        market = self.get_market(market_id)
+        outcome_prices = parse_list_field(market.get("outcomePrices"))
+        price = market_probability_price(market)
+        return {
+            "price": price,
+            "probability": price,
+            "outcomePrices": outcome_prices,
+            "bestBid": market.get("bestBid"),
+            "bestAsk": market.get("bestAsk"),
+            "lastTradePrice": market.get("lastTradePrice"),
+        }
     
     def get_market_volume(self, market_id: str, interval: str = "1h") -> List[Dict[str, Any]]:
         """Get volume data for a market
@@ -348,8 +367,14 @@ class GammaClient:
         Returns:
             List of volume data points
         """
-        params = {"interval": interval}
-        return self._request("GET", f"/markets/{market_id}/volume", params=params)
+        market = self.get_market(market_id)
+        return [{
+            "interval": interval,
+            "volume": market.get("volume", 0),
+            "volume24hr": market.get("volume24hr", market.get("volume24h", 0)),
+            "volume1wk": market.get("volume1wk", 0),
+            "volume1mo": market.get("volume1mo", 0),
+        }]
     
     def get_market_trades(
         self,
@@ -367,11 +392,17 @@ class GammaClient:
         Returns:
             List of trade dictionaries
         """
-        params = {"limit": limit}
-        if before:
-            params["before"] = before
-        
-        return self._request("GET", f"/markets/{market_id}/trades", params=params)
+        from .data_api import DataAPIClient
+
+        data_market_id = market_id
+        try:
+            market = self.get_market(market_id)
+            data_market_id = get_market_condition_id(market) or market_id
+        except Exception:
+            pass
+
+        data_client = DataAPIClient()
+        return data_client.get_trades(limit=limit, market=data_market_id, before=before)
     
     def search_markets(self, query: str, limit: int = 20) -> List[Dict[str, Any]]:
         """Search for markets by query
@@ -383,14 +414,14 @@ class GammaClient:
         Returns:
             List of matching markets
         """
-        # Try search endpoint first when supported.
-        # Gamma currently returns 422 for this endpoint in some environments.
+        # Try the documented public search endpoint first.
         if self._search_endpoint_supported:
             try:
-                params = {"q": query, "limit": limit}
-                results = self._request("GET", "/markets/search", params=params)
-                if results:
-                    return results
+                params = {"q": query, "limit_per_type": limit}
+                results = self._request("GET", "/public-search", params=params)
+                normalized = self._extract_search_markets(results)
+                if normalized:
+                    return normalized[:limit]
             except Exception as exc:
                 err = str(exc)
                 if "422 Client Error" in err or "404 Client Error" in err or " 422 " in err or " 404 " in err:
@@ -412,6 +443,37 @@ class GammaClient:
             return matches
         except Exception:
             return []
+
+    @staticmethod
+    def _extract_search_markets(data: Any) -> List[Dict[str, Any]]:
+        """Normalize /public-search events/markets into market-like results."""
+        if isinstance(data, list):
+            return data
+        if not isinstance(data, dict):
+            return []
+
+        direct_markets = data.get("markets")
+        if isinstance(direct_markets, list) and direct_markets:
+            return direct_markets
+
+        results: List[Dict[str, Any]] = []
+        for event in data.get("events", []) or []:
+            if not isinstance(event, dict):
+                continue
+            event_markets = event.get("markets")
+            if isinstance(event_markets, list) and event_markets:
+                for market in event_markets:
+                    if isinstance(market, dict):
+                        merged = market.copy()
+                        merged.setdefault("event_id", event.get("id"))
+                        merged.setdefault("event_slug", event.get("slug"))
+                        merged.setdefault("question", market.get("question") or event.get("title"))
+                        results.append(merged)
+            else:
+                market_like = event.copy()
+                market_like.setdefault("question", event.get("title"))
+                results.append(market_like)
+        return results
     
     def get_trending_markets(self, limit: int = 10) -> List[Dict[str, Any]]:
         """Get trending markets by 24hr volume

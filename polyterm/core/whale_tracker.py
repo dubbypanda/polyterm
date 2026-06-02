@@ -10,6 +10,7 @@ from collections import defaultdict
 from ..db.database import Database
 from ..db.models import Wallet, Trade, Alert
 from ..api.clob import CLOBClient
+from ..api.data_api import DataAPIClient
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ class WhaleTracker:
     ):
         self.db = database
         self.clob = clob_client
+        self.data_api = DataAPIClient()
         self.min_whale_trade = min_whale_trade
         self.min_smart_money_win_rate = min_smart_money_win_rate
         self.min_smart_money_trades = min_smart_money_trades
@@ -66,12 +68,13 @@ class WhaleTracker:
         Returns:
             Trade object if processed, None if skipped
         """
-        # Extract wallet address from maker_address or taker_address
+        # Extract wallet address from CLOB-auth or public Data API shapes.
         maker_address = trade_data.get('maker_address', trade_data.get('maker', ''))
         taker_address = trade_data.get('taker_address', trade_data.get('taker', ''))
+        proxy_wallet = trade_data.get('proxyWallet', trade_data.get('proxy_wallet', ''))
 
         # Use maker as primary (they provide liquidity)
-        wallet_address = maker_address or taker_address
+        wallet_address = maker_address or taker_address or proxy_wallet
         if not wallet_address:
             return None
 
@@ -95,8 +98,8 @@ class WhaleTracker:
 
         # Create trade record
         trade = Trade(
-            market_id=trade_data.get('market', trade_data.get('market_id', '')),
-            market_slug=trade_data.get('market_slug', ''),
+            market_id=trade_data.get('market', trade_data.get('market_id', trade_data.get('conditionId', ''))),
+            market_slug=trade_data.get('market_slug', trade_data.get('slug', '')),
             wallet_address=wallet_address,
             side=trade_data.get('side', 'BUY'),
             outcome=trade_data.get('outcome', ''),
@@ -299,7 +302,7 @@ class WhaleTracker:
     async def _run_rest_polling(self, market_slugs: List[str], poll_interval: float):
         """REST polling fallback for whale monitoring.
 
-        Polls CLOB REST for recent trades and processes them through
+        Polls the public Data API for recent trades and processes them through
         the same callback pipeline as WebSocket trades.
         """
         seen_tx_hashes: set = set()
@@ -309,13 +312,16 @@ class WhaleTracker:
             try:
                 for slug in (market_slugs or [""]):
                     try:
-                        trades = self.clob.get_recent_trades(slug, limit=50)
+                        trades = self.data_api.get_trades(market=slug or None, limit=50)
                     except Exception as e:
-                        logger.debug("REST poll failed for %s: %s", slug, e)
+                        logger.debug("Data API trade poll failed for %s: %s", slug, e)
                         continue
 
                     for trade_data in trades:
-                        tx_hash = trade_data.get("transactionHash", trade_data.get("tx_hash", ""))
+                        tx_hash = (
+                            trade_data.get("transactionHash")
+                            or trade_data.get("tx_hash")
+                        )
                         if tx_hash and tx_hash in seen_tx_hashes:
                             continue
                         if tx_hash:

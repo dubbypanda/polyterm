@@ -30,11 +30,14 @@ class TestWhaleTracker:
 
     @pytest.fixture
     def tracker(self, mock_db, mock_clob):
-        return WhaleTracker(
+        tracker = WhaleTracker(
             database=mock_db,
             clob_client=mock_clob,
             min_whale_trade=10000,
         )
+        tracker.data_api = Mock()
+        tracker.data_api.get_trades = Mock(return_value=[])
+        return tracker
 
     @pytest.fixture
     def sample_trade_data(self):
@@ -325,7 +328,7 @@ class TestWhaleTracker:
                 on_error(Exception("WebSocket permanently failed"))
 
         mock_clob.listen_for_trades = AsyncMock(side_effect=listen_with_error)
-        mock_clob.get_recent_trades = Mock(return_value=[])
+        tracker.data_api.get_trades = Mock(return_value=[])
 
         with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
             # Stop monitoring after first poll iteration
@@ -336,13 +339,13 @@ class TestWhaleTracker:
             await tracker.start_monitoring(["slug-a"], poll_interval=1.0)
 
         # Should have attempted REST polling
-        mock_clob.get_recent_trades.assert_called()
+        tracker.data_api.get_trades.assert_called()
 
     @pytest.mark.asyncio
     async def test_start_monitoring_falls_back_on_subscribe_exception(self, tracker, mock_clob):
         """Falls back to REST polling when subscribe raises"""
         mock_clob.subscribe_to_trades = AsyncMock(side_effect=Exception("connect failed"))
-        mock_clob.get_recent_trades = Mock(return_value=[])
+        tracker.data_api.get_trades = Mock(return_value=[])
 
         with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
             async def stop_after_sleep(seconds):
@@ -351,7 +354,7 @@ class TestWhaleTracker:
             mock_sleep.side_effect = stop_after_sleep
             await tracker.start_monitoring(["slug-a"], poll_interval=1.0)
 
-        mock_clob.get_recent_trades.assert_called()
+        tracker.data_api.get_trades.assert_called()
 
     @pytest.mark.asyncio
     async def test_rest_polling_processes_trades(self, tracker, mock_clob, mock_db):
@@ -364,7 +367,7 @@ class TestWhaleTracker:
                 on_error(Exception("failed"))
 
         mock_clob.listen_for_trades = AsyncMock(side_effect=listen_with_error)
-        mock_clob.get_recent_trades = Mock(return_value=[
+        tracker.data_api.get_trades = Mock(return_value=[
             {
                 "maker_address": "0xWhale",
                 "price": 0.50,
@@ -413,7 +416,7 @@ class TestWhaleTracker:
             "transactionHash": "0xSameTx",
         }
         # Return same trade on both poll iterations
-        mock_clob.get_recent_trades = Mock(return_value=[trade])
+        tracker.data_api.get_trades = Mock(return_value=[trade])
 
         poll_count = 0
 
@@ -438,7 +441,7 @@ class TestWhaleTracker:
                 on_error(Exception("failed"))
 
         mock_clob.listen_for_trades = AsyncMock(side_effect=listen_with_error)
-        mock_clob.get_recent_trades = Mock(side_effect=Exception("API error"))
+        tracker.data_api.get_trades = Mock(side_effect=Exception("API error"))
 
         poll_count = 0
 
@@ -480,7 +483,7 @@ class TestWhaleTracker:
         # Generate unique trades to fill the seen set
         call_idx = [0]
 
-        def make_trades(slug, limit=50):
+        def make_trades(market=None, limit=50):
             trades = []
             for i in range(limit):
                 trades.append({
@@ -493,7 +496,7 @@ class TestWhaleTracker:
             call_idx[0] += 1
             return trades
 
-        mock_clob.get_recent_trades = Mock(side_effect=make_trades)
+        tracker.data_api.get_trades = Mock(side_effect=make_trades)
 
         poll_count = 0
 
@@ -523,9 +526,9 @@ class TestWhaleTracker:
 
         call_idx = [0]
 
-        def get_trades(slug, limit=50):
+        def get_trades(market=None, limit=50):
             call_idx[0] += 1
-            if slug == "slug-fail":
+            if market == "slug-fail":
                 raise Exception("API timeout for this slug")
             return [{
                 "maker_address": "0xWhale",
@@ -535,7 +538,7 @@ class TestWhaleTracker:
                 "transactionHash": f"0xtx_{call_idx[0]}",
             }]
 
-        mock_clob.get_recent_trades = Mock(side_effect=get_trades)
+        tracker.data_api.get_trades = Mock(side_effect=get_trades)
 
         poll_count = 0
 
@@ -560,7 +563,7 @@ class TestWhaleTracker:
                 on_error(Exception("failed"))
 
         mock_clob.listen_for_trades = AsyncMock(side_effect=listen_with_error)
-        mock_clob.get_recent_trades = Mock(return_value=[{
+        tracker.data_api.get_trades = Mock(return_value=[{
             "maker_address": "0xWhale",
             "price": 0.50,
             "size": 100,
@@ -580,7 +583,7 @@ class TestWhaleTracker:
             await tracker.start_monitoring(None, poll_interval=1.0)
 
         # Should have polled with empty string slug
-        mock_clob.get_recent_trades.assert_called()
+        tracker.data_api.get_trades.assert_called()
         assert mock_db.insert_trade.call_count == 1
 
     @pytest.mark.asyncio
@@ -592,7 +595,7 @@ class TestWhaleTracker:
                 on_error(Exception("failed"))
 
         mock_clob.listen_for_trades = AsyncMock(side_effect=listen_with_error)
-        mock_clob.get_recent_trades = Mock(return_value=[
+        tracker.data_api.get_trades = Mock(return_value=[
             {
                 "maker_address": "0xWhale",
                 "price": 0.50,
@@ -628,12 +631,12 @@ class TestWhaleTracker:
         """When WS succeeds (no on_error), REST fallback is not triggered"""
         # listen_for_trades returns cleanly without invoking on_error
         mock_clob.listen_for_trades = AsyncMock()
-        mock_clob.get_recent_trades = Mock(return_value=[])
+        tracker.data_api.get_trades = Mock(return_value=[])
 
         await tracker.start_monitoring(["slug-a"], poll_interval=1.0)
 
         # REST polling should NOT have been called
-        mock_clob.get_recent_trades.assert_not_called()
+        tracker.data_api.get_trades.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_start_monitoring_can_restart_after_stop(self, tracker, mock_clob, mock_db):
@@ -644,7 +647,7 @@ class TestWhaleTracker:
                 on_error(Exception("failed"))
 
         mock_clob.listen_for_trades = AsyncMock(side_effect=listen_with_error)
-        mock_clob.get_recent_trades = Mock(return_value=[])
+        tracker.data_api.get_trades = Mock(return_value=[])
 
         # First run
         poll_count = 0
