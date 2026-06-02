@@ -33,6 +33,9 @@ class DataAPIClient:
                             pass
                     _time.sleep(wait)
                     continue
+                if response.status_code == 408 and attempt < retries - 1:
+                    _time.sleep(2 ** attempt)
+                    continue
                 if response.status_code >= 500 and attempt < retries - 1:
                     _time.sleep(2 ** attempt)
                     continue
@@ -84,6 +87,24 @@ class DataAPIClient:
         response = self._request("GET", "/trades", params=params)
         response.raise_for_status()
         return response.json()
+
+    def get_recent_trades(self, limit=1000, offset=0, filter_type=None, filter_amount=None, taker_only=True):
+        """Get recent public trades from the global Data API trade tape.
+
+        `filterType=CASH&filterAmount=N` asks the Data API for trades whose
+        cash notional is at least N. The public API currently caps pages at
+        1,000 rows and rejects offsets above 3,000. Callers that scan time
+        windows should expose that limit in quality flags instead of pretending
+        the whole chain history was read.
+        """
+        params = {"limit": limit, "offset": offset, "takerOnly": str(taker_only).lower()}
+        if filter_type and filter_amount is not None:
+            params["filterType"] = filter_type
+            params["filterAmount"] = filter_amount
+        response = self._request("GET", "/trades", params=params)
+        response.raise_for_status()
+        data = response.json()
+        return data if isinstance(data, list) else []
 
     def get_holders(self, market=None, token_id=None, limit=100, offset=0):
         """Get holders for a market or token when the public endpoint supports it."""

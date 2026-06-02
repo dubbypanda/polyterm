@@ -1,7 +1,7 @@
 """Wallet intelligence built from Polymarket Data API and local state."""
 
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from ..api.data_api import DataAPIClient
@@ -139,6 +139,136 @@ class WalletIntelligence:
                 "local_db_only",
                 "trade_direction_may_be_inferred",
             ],
+        }
+
+    def live_whales(
+        self,
+        min_notional: float = 10000,
+        hours: int = 24,
+        limit: int = 20,
+        market: Optional[str] = None,
+        now: Optional[datetime] = None,
+        page_size: int = 100,
+        max_offset: int = 3000,
+    ) -> Dict[str, Any]:
+        """Return public Data API whale trades and wallet rollups.
+
+        This is the agent-facing whale query path: it answers questions like
+        "which whale wallets placed bets over $100k in the last 72 hours" from
+        the public trade tape instead of relying on PolyTerm's local cache.
+        """
+        now_dt = now or datetime.now(timezone.utc)
+        if now_dt.tzinfo is None:
+            now_dt = now_dt.replace(tzinfo=timezone.utc)
+        cutoff = now_dt - timedelta(hours=hours)
+        cutoff_ts = int(cutoff.timestamp())
+
+        trades: List[Dict[str, Any]] = []
+        pages_scanned = 0
+        rows_scanned = 0
+        stopped_at_cutoff = False
+
+        for offset in range(0, max_offset + 1, page_size):
+            page = self.data_api.get_recent_trades(
+                limit=page_size,
+                offset=offset,
+                filter_type="CASH",
+                filter_amount=min_notional,
+            )
+            pages_scanned += 1
+            if not page:
+                break
+            rows_scanned += len(page)
+
+            page_timestamps = []
+            for raw in page:
+                timestamp = int(_as_float(raw.get("timestamp"), 0))
+                if timestamp:
+                    page_timestamps.append(timestamp)
+                if timestamp and timestamp < cutoff_ts:
+                    continue
+
+                identifiers = {
+                    str(raw.get("conditionId") or ""),
+                    str(raw.get("slug") or ""),
+                    str(raw.get("eventSlug") or ""),
+                    str(raw.get("asset") or ""),
+                }
+                if market and market not in identifiers:
+                    continue
+
+                size = _as_float(raw.get("size"), 0.0)
+                price = _as_float(raw.get("price"), 0.0)
+                notional = size * price
+                if notional < min_notional:
+                    continue
+
+                trades.append({
+                    "wallet": raw.get("proxyWallet") or raw.get("user") or raw.get("wallet"),
+                    "side": raw.get("side"),
+                    "market_title": raw.get("title"),
+                    "slug": raw.get("slug"),
+                    "condition_id": raw.get("conditionId"),
+                    "asset": raw.get("asset"),
+                    "outcome": raw.get("outcome"),
+                    "size": size,
+                    "price": price,
+                    "notional": notional,
+                    "timestamp": timestamp,
+                    "transaction_hash": raw.get("transactionHash"),
+                })
+
+            if page_timestamps and min(page_timestamps) < cutoff_ts:
+                stopped_at_cutoff = True
+                break
+
+        trades.sort(key=lambda row: (row["notional"], row["timestamp"]), reverse=True)
+        displayed_trades = trades[:limit]
+
+        by_wallet: Dict[str, Dict[str, Any]] = {}
+        for trade in trades:
+            wallet = str(trade.get("wallet") or "unknown")
+            item = by_wallet.setdefault(
+                wallet,
+                {
+                    "address": wallet,
+                    "trade_count": 0,
+                    "notional": 0.0,
+                    "largest_trade": 0.0,
+                    "markets": Counter(),
+                    "trades": [],
+                },
+            )
+            item["trade_count"] += 1
+            item["notional"] += trade["notional"]
+            item["largest_trade"] = max(item["largest_trade"], trade["notional"])
+            item["markets"][trade.get("slug") or trade.get("condition_id") or "unknown"] += 1
+            item["trades"].append(trade)
+
+        wallets = []
+        for item in by_wallet.values():
+            item["top_markets"] = item["markets"].most_common(5)
+            item.pop("markets", None)
+            wallets.append(item)
+        wallets.sort(key=lambda row: row["notional"], reverse=True)
+        displayed_wallets = wallets[:limit]
+
+        quality_flags = ["public_data_api", "trade_direction_may_be_inferred"]
+        if not stopped_at_cutoff:
+            quality_flags.append("data_api_recent_tape_window_limited")
+
+        return {
+            "source": "public_data_api",
+            "hours": hours,
+            "min_notional": min_notional,
+            "cutoff": cutoff.isoformat(),
+            "trade_count": len(trades),
+            "wallet_count": len(wallets),
+            "rows_scanned": rows_scanned,
+            "pages_scanned": pages_scanned,
+            "wallets": displayed_wallets,
+            "trades": displayed_trades,
+            "quality_flags": quality_flags,
         }
 
     def consensus_moves(self, trades: List[Dict[str, Any]], min_wallets: int = 3) -> List[Dict[str, Any]]:

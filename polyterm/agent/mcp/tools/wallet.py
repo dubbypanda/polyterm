@@ -15,6 +15,13 @@ def inspect(address: str, limit: int = 100) -> dict:
         data_api.close()
 
 
-def whales(min_notional: float = 10000, hours: int = 24) -> dict:
-    engine = WalletIntelligence(database=Database())
-    return envelope(engine.local_whales(min_notional=min_notional, hours=hours), meta={"tool": "wallet.whales"})
+def whales(min_notional: float = 10000, hours: int = 24, limit: int = 20) -> dict:
+    data_api = DataAPIClient()
+    engine = WalletIntelligence(data_api=data_api, database=Database())
+    try:
+        return envelope(
+            engine.live_whales(min_notional=min_notional, hours=hours, limit=limit),
+            meta={"tool": "wallet.whales"},
+        )
+    finally:
+        data_api.close()

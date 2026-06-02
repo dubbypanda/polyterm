@@ -31,6 +31,7 @@ profile = engine.analyze_wallet("0xabc...", refresh=True)
 | Method | Description |
 |--------|-------------|
 | `analyze_wallet(address, limit, refresh)` | Build a wallet profile from Data API and local state. |
+| `live_whales(min_notional, hours, limit, market)` | Return Data API whale trades and wallet rollups for agent questions. |
 | `local_whales(min_notional, hours)` | Return locally observed wallet-level whale trades. |
 | `consensus_moves(trades, min_wallets)` | Find markets where multiple wallets traded together. |
 
@@ -44,6 +45,7 @@ Local DB rows are used as a fallback and enrichment source. If refresh data exis
 
 - Data API `/positions`
 - Data API `/trades`
+- Data API `/trades?filterType=CASH&filterAmount=<min_notional>` for live whale discovery
 - Data API `/value` when available
 - Local SQLite `wallets` and `trades`
 
@@ -55,6 +57,8 @@ Returned profiles include flags such as:
 - `no_public_positions`
 - `no_public_trades`
 - `trade_direction_may_be_inferred`
+- `public_data_api`
+- `data_api_recent_tape_window_limited`
 - `local_db_only`
 
 These flags are important for agents because public trade direction and wallet data can be incomplete.

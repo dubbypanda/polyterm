@@ -88,7 +88,7 @@ TOOLS: List[AgentTool] = [
         name="wallet.whales",
         description="Return wallet-level whale activity and smart-money candidates.",
         command="polyterm whales --wallets --format json",
-        args={"min_notional": "number", "hours": "integer"},
+        args={"min_notional": "number", "hours": "integer", "limit": "integer"},
         schema="docs/schemas/wallet.whales.schema.json",
     ),
     AgentTool(

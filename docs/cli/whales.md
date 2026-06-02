@@ -27,6 +27,8 @@ In the TUI main menu, use any of these shortcuts: `3`, `w`
 | `--market` | string | `none` | Filter by market ID |
 | `--hours` | int | `24` | Hours of history to check |
 | `--limit` | int | `20` | Maximum number of trades to show |
+| `--wallets` | flag | `false` | Show wallet-level whale trades from the public Data API trade tape |
+| `--local` | flag | `false` | With `--wallets`, use only the local observed-trades database |
 | `--format` | ['table', 'json'] | `table` | Output format |
 
 ## Examples
@@ -63,10 +65,16 @@ polyterm whales --format json
 
 ## June 2026 Wallet-Level Mode
 
-`polyterm whales --wallets` exposes wallet-level whale activity from local trade history. This mode is intended for whale watchers and agents that need wallet addresses instead of only high-volume market proxies.
+`polyterm whales --wallets` exposes wallet-level whale activity from the public Polymarket Data API trade tape. This mode is intended for whale watchers and agents that need wallet addresses instead of only high-volume market proxies.
 
 ```bash
-polyterm whales --wallets --min-amount 50000 --hours 24 --format json
+polyterm whales --wallets --min-amount 100000 --hours 72 --limit 5 --format json
 ```
 
-The wallet mode reads local SQLite trades through `WalletIntelligence.local_whales()`. Its JSON output includes wallet address, trade count, notional value, largest trade, top markets, and quality flags. Quality flags may include `local_db_only` and `trade_direction_may_be_inferred`, so agents should treat this as observed local evidence.
+The wallet mode calls Data API `/trades` with `filterType=CASH` and `filterAmount=<min-amount>`, then filters by timestamp and returns both top trades and wallet rollups. Its JSON output includes wallet address, trade count, notional value, largest trade, top markets, rows/pages scanned, and quality flags.
+
+Use `--local` only when you explicitly want the older local SQLite observed-trades cache:
+
+```bash
+polyterm whales --wallets --local --min-amount 50000 --hours 24 --format json
+```

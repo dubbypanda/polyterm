@@ -657,7 +657,7 @@ python -m twine upload dist/*
 ### Trader, Researcher, and Whale-Watcher Tools
 - **Trade thesis**: `polyterm thesis -m <market>` generates an explainable market-level thesis with identifiers, evidence, risks, quality flags, and no-custody next actions.
 - **Wallet intelligence**: `polyterm wallets --analyze <address> --refresh --format json` uses public Data API context plus local state.
-- **Wallet-level whales**: `polyterm whales --wallets --format json` reports local wallet-level whale activity instead of only market-volume proxies.
+- **Wallet-level whales**: `polyterm whales --wallets --format json` reports Data API-backed wallet-level whale trades instead of only market-volume proxies.
 - **Data-backed leaderboards**: `polyterm leaderboard --source data-api` uses public Data API rows; `--source local` ranks locally tracked wallets.
 
 ### Research Archive, Alerts, and Cross-Venue Monitoring

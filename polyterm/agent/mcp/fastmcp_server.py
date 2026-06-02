@@ -89,8 +89,8 @@ def create_server() -> Any:
         name="wallet.whales",
         description="Return wallet-level whale activity and smart-money candidates.",
     )
-    def wallet_whales(min_notional: float = 10000, hours: int = 24) -> Dict[str, Any]:
-        return _call_tool("wallet.whales", min_notional=min_notional, hours=hours)
+    def wallet_whales(min_notional: float = 10000, hours: int = 24, limit: int = 20) -> Dict[str, Any]:
+        return _call_tool("wallet.whales", min_notional=min_notional, hours=hours, limit=limit)
 
     return mcp
 
