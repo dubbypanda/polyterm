@@ -66,7 +66,7 @@ If execution support is considered later, it should be a separate optional build
 
 - `polyterm agent manifest --format json` emits every public agent tool with name, description, args, output schema path, `read_only`, `mutates_local_state`, `requires_confirmation`, and `may_prompt`.
 - Stable envelope is used by all agent tools: `schema_version`, `success`, `data`, `error`, `meta`.
-- Standard MCP and JSON-lines adapters expose the 25 manifest tools, including search markets, resolve market, get order book, get price history, scan arbitrage, assess risk, inspect wallet, whale trades, trader leaderboard, market movers, and generate trade thesis.
+- Standard MCP and JSON-lines adapters expose the 26 manifest tools, including search markets, resolve market, get order book, get price history, scan arbitrage, assess risk, inspect wallet, whale trades, trader leaderboard, market flips, market movers, and generate trade thesis.
 - JSON-mode agent tools never print Rich preamble text to stdout.
 - Prompting and local mutation are rejected unless the tool manifest explicitly allows them.
 - Tests cover manifest generation, schema artifacts, adapter handler coverage, standard MCP registration, mutation safety, and live-tool normalization.

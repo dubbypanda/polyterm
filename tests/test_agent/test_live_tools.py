@@ -1,6 +1,6 @@
 """Live-intelligence agent tool normalization tests with mocked clients."""
 
-from polyterm.agent.mcp.tools import live
+from polyterm.agent.mcp.tools import flips, live
 
 
 class FakeGamma:
@@ -56,6 +56,66 @@ class FakeDataAPI:
         pass
 
 
+class FakeFlipGamma:
+    def get_markets(self, **kwargs):
+        return [
+            {
+                "id": "1",
+                "slug": "market-a",
+                "question": "Market A",
+                "conditionId": "condition-a",
+                "clobTokenIds": ["token-a", "token-a-no"],
+                "volume24hr": 1000,
+                "liquidity": 500,
+            },
+            {
+                "id": "2",
+                "slug": "market-b",
+                "question": "Market B",
+                "conditionId": "condition-b",
+                "clobTokenIds": ["token-b", "token-b-no"],
+                "volume24hr": 2000,
+                "liquidity": 1000,
+            },
+        ]
+
+    def close(self):
+        pass
+
+
+class FakeFlipCLOB:
+    def __init__(self):
+        self.history_calls = []
+
+    def get_price_history(self, token_id, interval="1h", fidelity=60, start_ts=None, end_ts=None):
+        self.history_calls.append({
+            "token_id": token_id,
+            "interval": interval,
+            "fidelity": fidelity,
+            "start_ts": start_ts,
+            "end_ts": end_ts,
+        })
+        if token_id == "token-a":
+            return [
+                {"t": start_ts + 60, "p": "0.42"},
+                {"t": start_ts + 120, "p": "0.51"},
+                {"t": end_ts - 60, "p": "0.74"},
+            ]
+        return [
+            {"t": start_ts + 60, "p": "0.70"},
+            {"t": end_ts - 60, "p": "0.64"},
+        ]
+
+    def get_order_book(self, token_id, depth=20):
+        return {
+            "bids": [{"price": "0.73"}, {"price": "0.72"}],
+            "asks": [{"price": "0.75"}, {"price": "0.76"}],
+        }
+
+    def close(self):
+        pass
+
+
 def test_top_markets_uses_live_gamma_shape(monkeypatch):
     monkeypatch.setattr(live, "GammaClient", lambda: FakeGamma())
     payload = live.top_markets(limit=1)
@@ -85,3 +145,26 @@ def test_market_movers_flags_flips(monkeypatch):
     payload = live.market_movers(limit=1, min_abs_change=0.05)
     assert payload["success"] is True
     assert payload["data"]["markets"][0]["flipped_50_percent"] is True
+
+
+def test_market_flips_detects_crossing_with_explicit_clob_window(monkeypatch):
+    fake_clob = FakeFlipCLOB()
+    monkeypatch.setattr(flips, "GammaClient", lambda: FakeFlipGamma())
+    monkeypatch.setattr(flips, "CLOBClient", lambda: fake_clob)
+
+    payload = flips.market_flips(hours=72, limit=3, direction="above", sample_size=10)
+
+    assert payload["success"] is True
+    assert payload["data"]["count"] == 1
+    row = payload["data"]["markets"][0]
+    assert row["gamma_market_id"] == "1"
+    assert row["crossing_direction"] == "above"
+    assert row["start_price"] == 0.42
+    assert row["end_price"] == 0.74
+    assert row["absolute_change"] == 0.32
+    assert row["spread"] == 0.02
+    assert "explicit_start_end_window" in row["quality_flags"]
+    assert fake_clob.history_calls[0]["interval"] == "max"
+    assert fake_clob.history_calls[0]["fidelity"] == 3600
+    assert fake_clob.history_calls[0]["start_ts"] is not None
+    assert fake_clob.history_calls[0]["end_ts"] is not None

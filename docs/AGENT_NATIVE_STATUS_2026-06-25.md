@@ -4,11 +4,11 @@
 
 After the initial inspection, PolyTerm's agent-native surface was expanded and validated:
 
-- The manifest now exposes 25 adapter-callable tools, including `market.top`, `wallet.whale_trades`, `trader.leaderboard`, and `market.movers` for common natural-language market questions.
+- The manifest now exposes 26 adapter-callable tools, including `market.top`, `wallet.whale_trades`, `trader.leaderboard`, `market.flips`, and `market.movers` for common natural-language market questions.
 - `polyterm agent catalog --format json` exposes the full 88-command CLI catalog for agents that need the broader PolyTerm suite.
 - `docs/tool-manifest.json` and `docs/schemas/*.schema.json` are generated from the live registry/schema code.
 - The JSON-lines adapter now has handlers for every manifest tool.
-- `polyterm agent mcp-server` exposes the same 25 tools through a standard MCP/FastMCP protocol server when the optional `.[mcp]` extra is installed.
+- `polyterm agent mcp-server` exposes the same 26 tools through a standard MCP/FastMCP protocol server when the optional `.[mcp]` extra is installed.
 - `polyterm agent jsonl-server` exposes the same tools through a dependency-free JSON-lines adapter.
 - `tests/test_agent` covers manifest/static parity, schema artifacts, handler coverage, mutation safety, and live-tool normalization.
 - The Data API leaderboard helper now uses the current documented `/v1/leaderboard` endpoint.
@@ -33,7 +33,7 @@ This report captures the current state of PolyTerm's agent-native work after a f
 
 PolyTerm is agent-native for repo-handoff discovery and the core live Polymarket questions in scope.
 
-The repo now has a dedicated `polyterm/agent` package, a manifest command, schema command, standard MCP server, JSON-lines adapter, checked-in static manifest and schema files, `llms.txt`, an agent docs page, 88 CLI commands in the catalog, broad tests, and a no-custody safety model.
+The repo now has a dedicated `polyterm/agent` package, a manifest command, schema command, standard MCP server, JSON-lines adapter, checked-in static manifest and schema files, `llms.txt`, an agent docs page, 26 adapter-callable tools, 88 CLI commands in the catalog, broad tests, and a no-custody safety model.
 
 Remaining hardening is mostly incremental: broader nested schemas for lower-priority payloads, more CLI JSON envelope consistency outside the agent adapter, and docs validation that compares option tables to live Click help.
 
@@ -51,13 +51,14 @@ Remaining hardening is mostly incremental: broader nested schemas for lower-prio
 
 - `polyterm agent mcp-server` runs a standard MCP/FastMCP protocol server when installed with `pip install -e ".[mcp]"`.
 - `polyterm agent jsonl-server` runs a JSON-lines stdio adapter with no MCP dependency.
-- Both adapters currently handle all 25 manifest tools:
+- Both adapters currently handle all 26 manifest tools:
   - `market.top`
   - `market.search`
   - `market.resolve`
   - `market.orderbook`
   - `market.price_history`
   - `market.movers`
+  - `market.flips`
   - `market.research`
   - `market.explain_move`
   - `market.compare`
@@ -119,7 +120,7 @@ Missing adapter handlers:
 
 Observed behavior: a JSON-lines request for `market.orderbook` returns `Unknown tool: market.orderbook` even though the manifest advertises the tool.
 
-Resolution: the manifest now registers 25 adapter-callable tools and every manifest tool has a handler in `polyterm/agent/mcp/server.py`. The new live tools cover top markets, whale trades, active traders with win-rate evidence, and market movers.
+Resolution: the manifest now registers 26 adapter-callable tools and every manifest tool has a handler in `polyterm/agent/mcp/server.py`. The new live tools cover top markets, whale trades, active traders with win-rate evidence, confirmed market flips, and market movers.
 
 ### P0: Schemas Are Envelope-Only
 
@@ -189,7 +190,7 @@ Resolution: alert and watch templates were corrected, alert mutation now require
 
 The original adapter was useful, but it was not a full MCP protocol server. It did not implement standard MCP initialize, list tools, or call tool semantics. It is now kept separately as `polyterm agent jsonl-server`.
 
-Resolution: `polyterm agent mcp-server` now uses the optional MCP Python SDK/FastMCP wrapper and registers the same 25 tool names as the JSON-lines adapter. `polyterm agent jsonl-server` remains available as a dependency-free JSON-lines adapter.
+Resolution: `polyterm agent mcp-server` now uses the optional MCP Python SDK/FastMCP wrapper and registers the same 26 tool names as the JSON-lines adapter. `polyterm agent jsonl-server` remains available as a dependency-free JSON-lines adapter.
 
 ### P1: CLI JSON Output Is Uneven
 
@@ -280,8 +281,8 @@ Verification during the buildout reported:
 | Area | Status | Reason |
 |------|--------|--------|
 | Agent docs entry points | Ready | README, `docs/AGENT_MODE.md`, `llms.txt`, manifest command, schemas command, and catalog command exist. |
-| JSON-lines adapter | Ready for declared tools | 25 of 25 manifest tools are callable through the adapter. |
-| Standard MCP compatibility | Ready with optional extra | `polyterm agent mcp-server` registers the 25 manifest tools through FastMCP when `.[mcp]` is installed. |
+| JSON-lines adapter | Ready for declared tools | 26 of 26 manifest tools are callable through the adapter. |
+| Standard MCP compatibility | Ready with optional extra | `polyterm agent mcp-server` registers the 26 manifest tools through FastMCP when `.[mcp]` is installed. |
 | Tool schemas | Partially ready | High-use live and identifier tools now have object schemas; deeper payload schemas can still be tightened. |
 | Safety model | Ready for current adapter | No-custody model, flags, confirmation requirement, and mutation tests exist. |
 | CLI JSON support | Partially ready | Many commands support JSON, but output contracts are uneven and under-tested. |

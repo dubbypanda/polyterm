@@ -108,6 +108,26 @@ TOOLS: List[AgentTool] = [
         ],
     ),
     AgentTool(
+        name="market.flips",
+        description="Return active markets whose YES price crossed 50% within a CLOB price-history window.",
+        command="polyterm agent jsonl-server tool=market.flips",
+        args={
+            "hours": "integer",
+            "limit": "integer",
+            "min_volume": "number",
+            "min_liquidity": "number",
+            "direction": "string",
+            "active_only": "boolean",
+            "sample_size": "integer",
+            "rank_by": "string",
+        },
+        schema="docs/schemas/market.flips.schema.json",
+        examples=[
+            "What are the top 3 markets that have flipped in the last 72 hours?",
+            "Which markets flipped below 50% in the last 48 hours?",
+        ],
+    ),
+    AgentTool(
         name="market.research",
         description="Generate a flagship one-call market research brief with thesis, evidence, gaps, and workflow.",
         command="polyterm research --market {market} --format json",

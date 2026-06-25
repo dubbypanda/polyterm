@@ -59,6 +59,9 @@ polyterm agent mcp-server
 
 # Legacy JSON-lines request
 printf '{"tool":"market.search","args":{"query":"bitcoin","limit":3}}\n' | polyterm agent jsonl-server
+
+# Confirm markets whose YES price crossed 50% in the last 72 hours
+printf '{"tool":"market.flips","args":{"hours":72,"limit":3,"min_volume":500}}\n' | polyterm agent jsonl-server
 ```
 
 ## How It Works
@@ -80,9 +83,10 @@ mcp_servers:
 
 - `polyterm.agent.registry` for command metadata and safety flags.
 - `polyterm.agent.schemas` for JSON Schema generation.
-- `polyterm.agent.mcp.protocol` for standard MCP protocol registration through FastMCP.
+- `polyterm.agent.mcp.fastmcp_server` for standard MCP protocol registration through FastMCP.
 - `polyterm.agent.mcp.server` for JSON-lines request dispatch.
 - Gamma, CLOB, Data API, and local SQLite through the grouped tool functions.
+- `market.flips` uses Gamma market discovery plus CLOB `/prices-history` with explicit `startTs` and `endTs` bounds to confirm 50% YES-price crossings.
 
 ## Agent Safety
 

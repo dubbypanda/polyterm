@@ -133,6 +133,32 @@ def create_server() -> Any:
         )
 
     @mcp.tool(
+        name="market.flips",
+        description="Return active markets whose YES price crossed 50% within a CLOB price-history window.",
+    )
+    def market_flips(
+        hours: int = 72,
+        limit: int = 3,
+        min_volume: float = 500,
+        min_liquidity: float = 0,
+        direction: str = "both",
+        active_only: bool = True,
+        sample_size: int = 5000,
+        rank_by: str = "largest_crossing_move",
+    ) -> Dict[str, Any]:
+        return _call_tool(
+            "market.flips",
+            hours=hours,
+            limit=limit,
+            min_volume=min_volume,
+            min_liquidity=min_liquidity,
+            direction=direction,
+            active_only=active_only,
+            sample_size=sample_size,
+            rank_by=rank_by,
+        )
+
+    @mcp.tool(
         name="market.explain_move",
         description="Explain a recent YES price move with CLOB price history, order book context, and quality flags.",
     )

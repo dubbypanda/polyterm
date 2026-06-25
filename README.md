@@ -134,6 +134,8 @@ For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIV
 | Market Research Tool | `market.research` | MCP/agent tool for complete market briefs |
 | Move Explainer Tool | `market.explain_move` | MCP/agent tool for recent price move explanations |
 | Market Compare Tool | `market.compare` | MCP/agent tool for side-by-side divergence analysis |
+| Flip Detector Tool | `market.flips` | MCP/agent tool for confirmed 50% YES-price crossings over a recent CLOB window |
+| Movers Tool | `market.movers` | MCP/agent tool for broad market spikes and available Gamma price changes |
 | Opportunity Scan Tool | `scan.opportunities` | MCP/agent tool for fresh moves and stale archive coverage |
 | Agent Doctor | `polyterm agent doctor` | Agent install, schema, MCP, API, archive, and Hermes config diagnostics |
 | Archive Search Tool | `archive.search` | MCP/agent tool for local research memory |
@@ -499,6 +501,9 @@ polyterm agent mcp-server
 
 # Legacy JSON-lines request
 printf '{"tool":"market.search","args":{"query":"bitcoin","limit":3}}\n' | polyterm agent jsonl-server
+
+# Confirm markets whose YES price crossed 50% in the last 72 hours
+printf '{"tool":"market.flips","args":{"hours":72,"limit":3,"min_volume":500}}\n' | polyterm agent jsonl-server
 
 # Generate a read-only market thesis
 polyterm thesis -m bitcoin --format json

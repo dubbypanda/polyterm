@@ -30,12 +30,18 @@ class FakeClobClient:
         self.history_calls = []
         self.book_calls = []
 
-    def get_price_history(self, token_id, interval="1h", fidelity=60):
-        self.history_calls.append({"token_id": token_id, "interval": interval, "fidelity": fidelity})
+    def get_price_history(self, token_id, interval="1h", fidelity=60, start_ts=None, end_ts=None):
+        self.history_calls.append({
+            "token_id": token_id,
+            "interval": interval,
+            "fidelity": fidelity,
+            "start_ts": start_ts,
+            "end_ts": end_ts,
+        })
         return [
-            {"t": 1717347600, "p": "0.61"},
-            {"t": 1717351200, "p": "0.66"},
-            {"t": 1717354800, "p": "0.72"},
+            {"t": start_ts + 60, "p": "0.61"},
+            {"t": start_ts + 120, "p": "0.66"},
+            {"t": end_ts - 60, "p": "0.72"},
         ]
 
     def get_order_book(self, token_id, depth=20):
@@ -68,13 +74,16 @@ def test_market_move_explainer_summarizes_direction_magnitude_and_drivers():
     assert "Price history shows a 11.0 point YES move from 61.0% to 72.0%." in result["drivers"]
     assert "Current order book spread is 2.0 points, so the move is backed by a tradable CLOB quote." in result["drivers"]
     assert result["quality_flags"] == ["price_history_available", "orderbook_available", "no_trade_execution"]
-    assert clob.history_calls == [{"token_id": "token-yes", "interval": "1h", "fidelity": 60}]
+    assert clob.history_calls[0]["token_id"] == "token-yes"
+    assert clob.history_calls[0]["interval"] == "1d"
+    assert clob.history_calls[0]["fidelity"] == 300
+    assert clob.history_calls[0]["end_ts"] - clob.history_calls[0]["start_ts"] == 24 * 3600
     assert clob.book_calls == [{"token_id": "token-yes", "depth": 20}]
 
 
 def test_market_move_explainer_reports_missing_price_history_as_gap():
     class EmptyHistoryClob(FakeClobClient):
-        def get_price_history(self, token_id, interval="1h", fidelity=60):
+        def get_price_history(self, token_id, interval="1h", fidelity=60, start_ts=None, end_ts=None):
             return []
 
     explainer = MarketMoveExplainer(gamma_client=FakeGammaClient(), clob_client=EmptyHistoryClob())

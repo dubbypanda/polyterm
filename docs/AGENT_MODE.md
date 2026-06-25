@@ -81,7 +81,7 @@ polyterm agent catalog --format json
 polyterm agent mcp-server
 ```
 
-The standard MCP server exposes the same 25 tool names as the manifest, including `market.top`, `wallet.whale_trades`, `trader.leaderboard`, and `market.movers`. It uses the optional MCP SDK, so fresh environments should install the `mcp` extra before launching it.
+The standard MCP server exposes the same 26 tool names as the manifest, including `market.top`, `wallet.whale_trades`, `trader.leaderboard`, `market.flips`, and `market.movers`. It uses the optional MCP SDK, so fresh environments should install the `mcp` extra before launching it.
 
 JSON-lines fallback:
 
@@ -89,6 +89,7 @@ JSON-lines fallback:
 printf '{"tool":"market.top","args":{"limit":3}}\n' | polyterm agent jsonl-server
 printf '{"tool":"wallet.whale_trades","args":{"limit":5,"hours":24}}\n' | polyterm agent jsonl-server
 printf '{"tool":"trader.leaderboard","args":{"limit":3,"hours":72,"min_win_rate":0.8}}\n' | polyterm agent jsonl-server
+printf '{"tool":"market.flips","args":{"limit":3,"hours":72,"min_volume":500,"rank_by":"largest_crossing_move"}}\n' | polyterm agent jsonl-server
 printf '{"tool":"market.movers","args":{"limit":3,"hours":48}}\n' | polyterm agent jsonl-server
 polyterm thesis -m "bitcoin" --format json
 polyterm wallets --analyze 0xabc... --refresh --format json
@@ -106,7 +107,7 @@ mcp_servers:
     connect_timeout: 60
 ```
 
-After restarting the client, tools are exposed through MCP as `agent.manifest`, `agent.schemas`, `agent.doctor`, `market.search`, `market.resolve`, `market.top`, `market.orderbook`, `market.price_history`, `market.movers`, `market.research`, `market.explain_move`, `market.compare`, `scan.opportunities`, `archive.search`, `archive.status`, `archive.manifest`, `analytics.arbitrage`, `analytics.risk`, `analytics.thesis`, `wallet.inspect`, `wallet.whales`, `wallet.whale_trades`, `wallet.smart_money`, `trader.leaderboard`, `alerts.create_price_rule`, and `watch.scheduled_scan`.
+After restarting the client, tools are exposed through MCP as `agent.manifest`, `agent.schemas`, `agent.doctor`, `market.search`, `market.resolve`, `market.top`, `market.orderbook`, `market.price_history`, `market.movers`, `market.flips`, `market.research`, `market.explain_move`, `market.compare`, `scan.opportunities`, `archive.search`, `archive.status`, `archive.manifest`, `analytics.arbitrage`, `analytics.risk`, `analytics.thesis`, `wallet.inspect`, `wallet.whales`, `wallet.whale_trades`, `wallet.smart_money`, `trader.leaderboard`, `alerts.create_price_rule`, and `watch.scheduled_scan`.
 
 ```bash
 polyterm agent mcp-server
@@ -115,16 +116,35 @@ polyterm agent mcp-server
 Recommended sequence:
 
 1. Use `market.research` for a complete one-call brief.
-2. Use `market.explain_move` when the user asks why a YES price moved recently.
-3. Use `market.compare` when the user asks which of several related markets looks divergent or mispriced.
-4. Use `scan.opportunities` to find fresh movers, stale archive coverage, and markets that need research.
-5. Use `wallet.smart_money` for the local high win-rate wallet leaderboard; refresh evidence first when recency matters.
-6. Resolve or search for a market when identifiers are ambiguous.
-7. Generate a lower-level thesis when you need raw thesis internals.
-8. Inspect wallet/whale activity if the thesis depends on smart money.
-9. Check cross-venue spreads.
-10. Collect snapshots if the market needs observation over time.
-11. Create local alert rules only after policy approval.
+2. Use `market.flips` when the user asks which markets flipped, crossed 50%, or moved above/below the YES majority line in a recent window.
+3. Use `market.movers` when the user asks for broader spikes or large available Gamma price changes, not necessarily confirmed 50% crossings.
+4. Use `market.explain_move` when the user asks why a specific YES price moved recently; it uses explicit CLOB `startTs` and `endTs` bounds for the requested window.
+5. Use `market.compare` when the user asks which of several related markets looks divergent or mispriced.
+6. Use `scan.opportunities` to find fresh movers, stale archive coverage, and markets that need research.
+7. Use `wallet.smart_money` for the local high win-rate wallet leaderboard; refresh evidence first when recency matters.
+8. Resolve or search for a market when identifiers are ambiguous.
+9. Generate a lower-level thesis when you need raw thesis internals.
+10. Inspect wallet/whale activity if the thesis depends on smart money.
+11. Check cross-venue spreads.
+12. Collect snapshots if the market needs observation over time.
+13. Create local alert rules only after policy approval.
+
+For questions like "What are the top 3 markets that have flipped in the last 72 hours?", call `market.flips` first:
+
+```json
+{
+  "tool": "market.flips",
+  "args": {
+    "hours": 72,
+    "limit": 3,
+    "min_volume": 500,
+    "active_only": true,
+    "rank_by": "largest_crossing_move"
+  }
+}
+```
+
+The tool scans active Gamma markets, pulls CLOB YES-token price history with explicit `startTs` and `endTs`, detects confirmed 50% crossings, and returns crossing timestamps, start/end prices, min/max price, current bid/ask/spread, volume, liquidity, thin-market flags, and provenance quality flags. Supported ranking modes are `largest_crossing_move`, `highest_24h_volume`, `highest_liquidity`, `freshest_cross`, and `near_50_after_flip`; `direction` accepts `both`, `above`, or `below`.
 
 ## OpenClaw Workflow
 
@@ -136,6 +156,7 @@ printf '{"tool":"market.search","args":{"query":"bitcoin","limit":3}}\n' | polyt
 printf '{"tool":"market.research","args":{"market":"bitcoin"}}\n' | polyterm agent jsonl-server
 printf '{"tool":"market.explain_move","args":{"market":"bitcoin","hours":24}}\n' | polyterm agent jsonl-server
 printf '{"tool":"market.compare","args":{"markets":["bitcoin 100k","bitcoin 90k"],"hours":24}}\n' | polyterm agent jsonl-server
+printf '{"tool":"market.flips","args":{"hours":72,"limit":3,"min_volume":500}}\n' | polyterm agent jsonl-server
 printf '{"tool":"agent.doctor","args":{"skip_network":true}}\n' | polyterm agent jsonl-server
 printf '{"tool":"scan.opportunities","args":{"query":"bitcoin","limit":5,"min_volume":5000}}\n' | polyterm agent jsonl-server
 printf '{"tool":"archive.search","args":{"query":"bitcoin","limit":5}}\n' | polyterm agent jsonl-server

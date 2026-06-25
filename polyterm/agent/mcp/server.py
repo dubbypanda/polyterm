@@ -11,7 +11,7 @@ from typing import Callable, Dict
 
 from ..contracts import envelope, error_envelope
 from ..registry import get_manifest
-from .tools import alerts, analytics, archive, live, market, meta, scan, wallet, watch
+from .tools import alerts, analytics, archive, flips, live, market, meta, scan, wallet, watch
 
 
 TOOL_HANDLERS: Dict[str, Callable[..., dict]] = {
@@ -23,6 +23,7 @@ TOOL_HANDLERS: Dict[str, Callable[..., dict]] = {
     "market.orderbook": market.orderbook,
     "market.price_history": market.price_history,
     "market.movers": live.market_movers,
+    "market.flips": flips.market_flips,
     "market.research": market.research,
     "market.explain_move": market.explain_move,
     "market.compare": market.compare,

@@ -24,7 +24,7 @@ class MarketMoveExplainer:
         market_data = self._resolve_market(market)
         token_ids = get_clob_token_ids(market_data)
         token_id = token_ids[0] if token_ids else ""
-        history = self._price_history(token_id)
+        history = self._price_history(token_id, hours)
         orderbook = self._orderbook(token_id)
         move = _summarize_move(history, hours=hours)
         drivers = _drivers(move, orderbook)
@@ -63,14 +63,22 @@ class MarketMoveExplainer:
         results = self.gamma.search_markets(identifier, limit=5)
         return _prefer_active_market(results)
 
-    def _price_history(self, token_id: str) -> List[Dict[str, Any]]:
+    def _price_history(self, token_id: str, hours: int) -> List[Dict[str, Any]]:
         if not token_id:
             return []
+        interval, fidelity = _select_clob_granularity(hours)
+        start_ts, end_ts = _build_time_bounds(hours)
         try:
-            history = self.clob.get_price_history(token_id, interval="1h", fidelity=60)
+            history = self.clob.get_price_history(
+                token_id,
+                interval=interval,
+                fidelity=fidelity,
+                start_ts=start_ts,
+                end_ts=end_ts,
+            )
         except Exception:
             return []
-        return history if isinstance(history, list) else []
+        return _filter_history_window(history, start_ts, end_ts) if isinstance(history, list) else []
 
     def _orderbook(self, token_id: str) -> Dict[str, Any]:
         if not token_id:
@@ -134,6 +142,42 @@ def _extract_price(point: Dict[str, Any]) -> Optional[float]:
         except (TypeError, ValueError):
             continue
     return None
+
+
+def _extract_timestamp(point: Dict[str, Any]) -> Optional[int]:
+    for key in ("t", "timestamp", "time"):
+        if key not in point:
+            continue
+        try:
+            return int(float(point[key]))
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _filter_history_window(history: List[Dict[str, Any]], start_ts: int, end_ts: int) -> List[Dict[str, Any]]:
+    rows = []
+    for point in history:
+        timestamp = _extract_timestamp(point)
+        if timestamp is None or start_ts <= timestamp <= end_ts:
+            rows.append(point)
+    return rows
+
+
+def _select_clob_granularity(hours: int):
+    if hours <= 1:
+        return "1h", 60
+    if hours <= 6:
+        return "6h", 60
+    if hours <= 24:
+        return "1d", 300
+    return "max", 3600
+
+
+def _build_time_bounds(hours: int):
+    safe_hours = max(int(hours), 1)
+    end_ts = int(datetime.now(timezone.utc).timestamp())
+    return end_ts - (safe_hours * 3600), end_ts
 
 
 def _headline(move: Dict[str, Any]) -> str:

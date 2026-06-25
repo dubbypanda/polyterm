@@ -5,12 +5,12 @@ This backlog reflects the June 25, 2026 agent-native buildout. The older June 2 
 ## Completed In The Agent-Native Buildout
 
 - Agent registry, stable envelope helpers, and generated JSON Schemas exist under `polyterm/agent`.
-- `polyterm agent manifest --format json` emits 25 adapter-callable tools plus the 88-command CLI catalog.
+- `polyterm agent manifest --format json` emits 26 adapter-callable tools plus the 88-command CLI catalog.
 - `polyterm agent catalog --format json` exposes the full CLI command inventory for repo-handoff agents.
 - `docs/tool-manifest.json`, `docs/schemas/*.schema.json`, `docs/AGENT_MODE.md`, `docs/cli/agent.md`, and `llms.txt` are checked in for static discovery.
 - `polyterm agent mcp-server` exposes the manifest tools through the optional standard MCP/FastMCP server.
 - `polyterm agent jsonl-server` remains as a dependency-free JSON-lines adapter.
-- Live agent tools cover top markets, whale trades, active traders with win-rate evidence, and market movers.
+- Live agent tools cover top markets, whale trades, active traders with win-rate evidence, confirmed market flips, and market movers.
 - Mutating local-state tools are flagged and require explicit confirmation.
 - `tests/test_agent` covers manifest/static parity, adapter coverage, standard MCP registration, mutation safety, and live-tool normalization.
 
@@ -45,7 +45,7 @@ This backlog reflects the June 25, 2026 agent-native buildout. The older June 2 
 **Acceptance criteria:**
 
 - JSON-lines and standard MCP adapters return the same envelope shape for representative requests.
-- Snapshots cover success and failure paths for `market.top`, `wallet.whale_trades`, `trader.leaderboard`, `market.movers`, and `alerts.create_price_rule`.
+- Snapshots cover success and failure paths for `market.top`, `wallet.whale_trades`, `trader.leaderboard`, `market.flips`, `market.movers`, and `alerts.create_price_rule`.
 - Snapshot tests normalize timestamps and live API values so they remain deterministic.
 
 ## P1: Harden CLI JSON For Agents
@@ -138,6 +138,23 @@ This backlog reflects the June 25, 2026 agent-native buildout. The older June 2 
 - `market.movers` uses true 48-hour changes when available from an API source or local archive.
 - Until then, output keeps `change_window_uses_available_gamma_change_fields` in `quality_flags`.
 - Docs remain explicit about whether the requested window is exact or best-effort.
+
+### TODO-8: Cache Expensive Live Agent Scans
+
+**Priority:** P2
+**Effort:** M
+**Files:**
+
+- `polyterm/agent/mcp/tools/flips.py`
+- `polyterm/agent/mcp/tools/live.py`
+- `polyterm/db/`
+- `docs/AGENT_MODE.md`
+
+**Acceptance criteria:**
+
+- `market.flips` and other expensive broad scans can persist bounded recent scan snapshots locally.
+- Follow-up questions can reuse a fresh snapshot instead of refetching thousands of markets and CLOB histories.
+- Cached responses include snapshot age, source window, and a quality flag that distinguishes cached from live API data.
 
 ## Verification
 

@@ -1,0 +1,104 @@
+{
+  "type": "object",
+  "required": [
+    "schema_version",
+    "success",
+    "data",
+    "error",
+    "meta"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "success": {
+      "type": "boolean"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "hours",
+        "window_start",
+        "window_end",
+        "scanned_markets",
+        "candidate_count",
+        "confirmed_flips",
+        "count",
+        "markets",
+        "quality_flags"
+      ],
+      "properties": {
+        "hours": {
+          "type": "integer"
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "min_volume": {
+          "type": "number"
+        },
+        "min_liquidity": {
+          "type": "number"
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "both",
+            "above",
+            "below"
+          ]
+        },
+        "rank_by": {
+          "type": "string"
+        },
+        "window_start": {
+          "type": "integer"
+        },
+        "window_start_iso": {
+          "type": "string"
+        },
+        "window_end": {
+          "type": "integer"
+        },
+        "window_end_iso": {
+          "type": "string"
+        },
+        "scanned_markets": {
+          "type": "integer"
+        },
+        "candidate_count": {
+          "type": "integer"
+        },
+        "confirmed_flips": {
+          "type": "integer"
+        },
+        "count": {
+          "type": "integer"
+        },
+        "markets": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "quality_flags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "error": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "meta": {
+      "type": "object"
+    }
+  },
+  "title": "PolyTerm market.flips response",
+  "description": "Return active markets whose YES price crossed 50% within a CLOB price-history window."
+}
